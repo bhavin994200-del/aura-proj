@@ -1,3 +1,4 @@
+import asyncio
 import calendar
 from datetime import datetime
 import math
@@ -31,7 +32,6 @@ def send_telegram_alert(symbol, message):
     return
   current_time = datetime.now().timestamp()
 
-  # 🔥 જો છેલ્લા ૧ કલાક (3600 સેકન્ડ) માં આ જ સ્ટોકનું એલર્ટ ગયું હોય તો ફરી નહીં જાય
   if symbol in last_telegram_alerts and (
       current_time - last_telegram_alerts[symbol] < 3600
   ):
@@ -50,6 +50,148 @@ def send_telegram_alert(symbol, message):
   except Exception as e:
     print('Telegram Error:', e)
     return None
+
+
+# 🔥 Telegram Bot Listener: યુઝર જ્યારે પણ ટેલિગ્રામમાં સ્ટોકનું નામ લખશે ત્યારે આ ચાલશે
+async def telegram_bot_listener():
+  offset = 0
+  while True:
+    try:
+      url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates?offset={offset}&timeout=30'
+      res = requests.get(url, timeout=35)
+      data = res.json()
+
+      if data.get('ok'):
+        for update in data.get('result', []):
+          offset = update['update_id'] + 1
+          message = update.get('message', {})
+          text = message.get('text', '').strip().upper()
+          chat_id = message.get('chat', {}).get('id')
+
+          if text and chat_id:
+            if text == '/START':
+              reply = (
+                  '👋 સ્વાગત છે Aura Terminal માં!\nગમે તે સ્ટોક કે ઇન્ડેક્સનું'
+                  ' નામ લખો (દા.ત. `RELIANCE`, `NIFTY`, `BANKNIFTY`), એટલે હું'
+                  ' તમને તેના **OpenPrice** અને **Weekly/Monthly Gann Levels**'
+                  ' મોકલી આપીશ.'
+              )
+            else:
+              sym = text
+              # ટિકર સેટ કરો
+              if sym in ['NIFTY', 'FINNIFTY', 'MIDCAPNIFTY']:
+                t_str = '^NSEI'
+              elif sym == 'BANKNIFTY':
+                t_str = '^NSEBANK'
+              elif sym == 'SENSEX':
+                t_str = '^BSESN'
+              elif sym == 'COPPER':
+                t_str = 'HG=F'
+              elif sym == 'CRUDEOIL':
+                t_str = 'CL=F'
+              elif sym == 'NATURALGAS':
+                t_str = 'NG=F'
+              elif sym == 'GOLD':
+                t_str = 'GC=F'
+              elif sym == 'SILVER':
+                t_str = 'SI=F'
+              else:
+                t_str = f'{sym}.NS'
+
+              ticker = yf.Ticker(t_str)
+              hist = ticker.history(period='6mo', interval='1d')
+
+              if not hist.empty and len(hist) > 10:
+                ltp = float(hist['Close'].iloc[-1])
+                open_price = (
+                    float(hist['Open'].iloc[-1])
+                    if 'Open' in hist.columns
+                    and not math.isnan(hist['Open'].iloc[-1])
+                    else ltp
+                )
+                prev_close = (
+                    float(hist['Close'].iloc[-2]) if len(hist) > 1 else ltp
+                )
+                pct = round(((ltp - prev_close) / prev_close) * 100, 2)
+
+                # 1. Open Price Gann Octave Calculation
+                base_price = open_price if open_price > 0 else ltp
+                root = math.sqrt(base_price)
+                baseRoot = math.floor(root * 8.0) / 8.0
+                sell_lvl = math.pow(baseRoot, 2)
+                buy_lvl = math.pow(baseRoot + 0.125, 2)
+                bT1 = math.pow(baseRoot + 0.250, 2)
+                bT2 = math.pow(baseRoot + 0.375, 2)
+                bT3 = math.pow(baseRoot + 0.500, 2)
+                bT4 = math.pow(baseRoot + 0.625, 2)
+                sT1 = math.pow(baseRoot - 0.125, 2)
+                sT2 = math.pow(baseRoot - 0.250, 2)
+                sT3 = math.pow(baseRoot - 0.375, 2)
+                sT4 = math.pow(baseRoot - 0.500, 2)
+
+                # 2. Weekly & Monthly Static Pivot Calculation
+                df_weekly = hist.resample('W-FRI').last().dropna()
+                w_close = (
+                    float(df_weekly['Close'].iloc[-2])
+                    if len(df_weekly) >= 2
+                    else ltp
+                )
+                r_w = math.sqrt(w_close)
+                sup_w = round((r_w - 1.0) ** 2, 2)
+                res_w = round((r_w + 1.0) ** 2, 2)
+
+                df_monthly = hist.resample('ME').last().dropna()
+                m_close = (
+                    float(df_monthly['Close'].iloc[-2])
+                    if len(df_monthly) >= 2
+                    else ltp
+                )
+                r_m = math.sqrt(m_close)
+                sup_m = round((r_m - 1.0) ** 2, 2)
+                res_m = round((r_m + 1.0) ** 2, 2)
+
+                reply = (
+                    f'📊 *Analysis Report: {sym}*\n'
+                    f'💰 *LTP:* ₹{round(ltp, 2)}  ({pct}%)\n'
+                    f'📂 *Open Price:* ₹{round(open_price, 2)}\n\n'
+                    f'🚀 *OpenPrice Gann Levels:*\n'
+                    f'• 🟢 Buy Trigger: ₹{round(buy_lvl, 2)}\n'
+                    f'  Targets: ₹{round(bT1, 2)} | ₹{round(bT2, 2)} |'
+                    f' ₹{round(bT3, 2)} | ₹{round(bT4, 2)}\n'
+                    f'• 🔴 Sell Trigger: ₹{round(sell_lvl, 2)}\n'
+                    f'  Targets: ₹{round(sT1, 2)} | ₹{round(sT2, 2)} |'
+                    f' ₹{round(sT3, 2)} | ₹{round(sT4, 2)}\n\n'
+                    f'📅 *Static Pivot Levels:*\n'
+                    f'• 📉 *Weekly:* Support ₹{sup_w} | Resistance ₹{res_w}\n'
+                    f'• 📈 *Monthly:* Support ₹{sup_m} | Resistance ₹{res_m}'
+                )
+              else:
+                reply = (
+                    f"❌ માફ કરશો, '{sym}' માટે ડેટા મળ્યો નથી. કૃપા કરીને સાચું"
+                    ' નામ લખો.'
+                )
+
+            send_url = (
+                f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
+            )
+            requests.post(
+                send_url,
+                json={
+                    'chat_id': chat_id,
+                    'text': reply,
+                    'parse_mode': 'Markdown',
+                },
+                timeout=5,
+            )
+    except Exception as e:
+      print(f'Bot Listener Error: {e}')
+    await asyncio.sleep(2)
+
+
+@app.on_event('startup')
+async def startup_event():
+  asyncio.create_task(telegram_bot_listener())
+  print('🟢 Telegram Bot Listener Started Successfully!')
 
 
 rashi_names = [
@@ -240,7 +382,6 @@ async def calculate_stock(item: dict):
   }
 
 
-# 🔥 Telegram Test Endpoint (ટેસ્ટ કરવા માટે)
 @app.get('/test-telegram')
 async def test_telegram():
   res = send_telegram_alert(
@@ -250,7 +391,6 @@ async def test_telegram():
   return {'status': 'success', 'response': res}
 
 
-# 🔥 OpenPrice મોડ્યુલ: આજના ઓપન પ્રાઇસથી સાચું ગન ઓક્ટેવ કેલ્ક્યુલેશન
 @app.post('/scan-open-price')
 async def scan_open_price(item: dict):
   symbols = item.get('symbols', ['NIFTY', 'BANKNIFTY', 'RELIANCE'])
@@ -298,7 +438,6 @@ async def scan_open_price(item: dict):
 
       base_price = open_price if open_price > 0 else ltp
 
-      # 🔥 Gann Square of 9 Octave Logic (0.125 step based on Open Price)
       root = math.sqrt(base_price)
       baseRoot = math.floor(root * 8.0) / 8.0
 

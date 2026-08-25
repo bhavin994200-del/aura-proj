@@ -55,40 +55,37 @@ function App() {
     return sum;
   }
 
-  // 🔥 WebSocket Live Market Connection (Home Dashboard & Header Instant Update)
+  // 🔥 Auto-Reconnect WebSocket + Fallback 5s Timer for Unstoppable Live Updates
   useEffect(() => {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const wsUrl = `${wsProtocol}aura-proj.onrender.com/ws/market-live`;
-    
-    const ws = new WebSocket(wsUrl);
+    let ws = null;
+    let reconnectTimer = null;
+    let isWsActive = false;
 
-    ws.onopen = () => {
-      console.log("🟢 WebSocket Connected Successfully!");
-    };
-
-    ws.onmessage = (event) => {
+    // Fallback polling function if WebSocket drops
+    const fetchFallbackData = async () => {
+      if (isWsActive) return; // Skip if WebSocket is working fine
       try {
-        const response = JSON.parse(event.data);
-        // support both formats: response.data or direct array
-        const liveList = response.data || (Array.isArray(response) ? response : null);
-        
-        if (liveList && Array.isArray(liveList)) {
-          // 1. Update Top Header Indices
+        const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbols: ['NIFTY', 'BANKNIFTY', 'SENSEX'] })
+        });
+        const response = await res.json();
+        const liveList = response.data || [];
+
+        if (liveList.length > 0) {
           setIndices(prevIndices => prevIndices.map(ind => {
-            const found = liveList.find(item => item.symbol === ind.name || item.name === ind.name);
-            if (found && (found.ltp || found.close)) {
-              const ltpVal = found.ltp || found.close;
-              const prevVal = found.prev_close || ind.prevClose;
-              return { ...ind, ltp: ltpVal, prevClose: prevVal };
+            const found = liveList.find(item => item.symbol === ind.name);
+            if (found && found.ltp) {
+              return { ...ind, ltp: found.ltp };
             }
             return ind;
           }));
 
-          // 2. Update Home Dashboard Market Cards
           setMarketData(prevMarket => prevMarket.map(item => {
-            const found = liveList.find(i => i.symbol === item.name || i.name === item.name);
-            if (found && (found.ltp || found.close)) {
-              const spotLtp = found.ltp || found.close;
+            const found = liveList.find(i => i.symbol === item.name);
+            if (found && found.ltp) {
+              const spotLtp = found.ltp;
               const prevClose = found.prev_close || item.prevClose;
               const spotDiff = spotLtp - prevClose;
               const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
@@ -99,8 +96,8 @@ function App() {
                 spotChange: Math.abs(spotDiff).toFixed(2),
                 spotChangePct: Math.abs(spotPct).toFixed(2),
                 prevClose: prevClose,
-                high: found.high || item.high,
-                low: found.low || item.low
+                high: found.weekly?.resistance || item.high,
+                low: found.weekly?.support || item.low
               };
             }
             return item;
@@ -109,24 +106,101 @@ function App() {
           if (response.india_vix) {
             setIndiaVix(response.india_vix);
           }
-
           setLastUpdated(new Date().toLocaleTimeString());
         }
-      } catch (err) {
-        console.log("WebSocket message parse error:", err);
+      } catch (e) {
+        console.log("Fallback fetch error");
       }
     };
 
-    ws.onerror = (error) => {
-      console.log("WebSocket error:", error);
+    const connectWebSocket = () => {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      const wsUrl = `${wsProtocol}aura-proj.onrender.com/ws/market-live`;
+      
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        isWsActive = true;
+        console.log("🟢 WebSocket Connected Successfully!");
+        if (reconnectTimer) {
+          clearInterval(reconnectTimer);
+          reconnectTimer = null;
+        }
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          isWsActive = true;
+          const response = JSON.parse(event.data);
+          const liveList = response.data || (Array.isArray(response) ? response : null);
+          
+          if (liveList && Array.isArray(liveList)) {
+            setIndices(prevIndices => prevIndices.map(ind => {
+              const found = liveList.find(item => item.symbol === ind.name || item.name === ind.name);
+              if (found && (found.ltp || found.close)) {
+                const ltpVal = found.ltp || found.close;
+                const prevVal = found.prev_close || ind.prevClose;
+                return { ...ind, ltp: ltpVal, prevClose: prevVal };
+              }
+              return ind;
+            }));
+
+            setMarketData(prevMarket => prevMarket.map(item => {
+              const found = liveList.find(i => i.symbol === item.name || i.name === item.name);
+              if (found && (found.ltp || found.close)) {
+                const spotLtp = found.ltp || found.close;
+                const prevClose = found.prev_close || item.prevClose;
+                const spotDiff = spotLtp - prevClose;
+                const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
+
+                return {
+                  ...item,
+                  ltp: spotLtp,
+                  spotChange: Math.abs(spotDiff).toFixed(2),
+                  spotChangePct: Math.abs(spotPct).toFixed(2),
+                  prevClose: prevClose,
+                  high: found.high || item.high,
+                  low: found.low || item.low
+                };
+              }
+              return item;
+            }));
+
+            if (response.india_vix) {
+              setIndiaVix(response.india_vix);
+            }
+
+            setLastUpdated(new Date().toLocaleTimeString());
+          }
+        } catch (err) {
+          console.log("WebSocket parse error:", err);
+        }
+      };
+
+      ws.onerror = () => {
+        isWsActive = false;
+      };
+
+      ws.onclose = () => {
+        isWsActive = false;
+        console.log("🔴 WebSocket Disconnected. Reconnecting in 3s...");
+        if (!reconnectTimer) {
+          reconnectTimer = setInterval(() => {
+            connectWebSocket();
+          }, 3000);
+        }
+      };
     };
 
-    ws.onclose = () => {
-      console.log("🔴 WebSocket Disconnected.");
-    };
+    connectWebSocket();
+
+    // Backup interval: runs every 5 seconds to ensure data never stops even if WS sleeps
+    const backupInterval = setInterval(fetchFallbackData, 5000);
 
     return () => {
-      ws.close();
+      if (ws) ws.close();
+      if (reconnectTimer) clearInterval(reconnectTimer);
+      clearInterval(backupInterval);
     };
   }, []);
 

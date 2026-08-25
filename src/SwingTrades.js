@@ -1,15 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { fullFnoList } from './watchlistData';
 
 export default function SwingTradesModule({ marketData = [] }) {
   const [subTab, setSubTab] = useState('weekly');
   const [selectedStock, setSelectedStock] = useState('');
   const [tradeType, setTradeType] = useState('BUY');
+  const [liveMarketStocks, setLiveMarketStocks] = useState(marketData);
 
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
-  // 🔥 લાઈવ માર્કેટ સ્કેનર ડેટામાંથી BUY અને SHORT અલગ કરીએ છીએ
-  const buyStocksFromMarket = marketData
+  // 🔥 જો બહારથી marketData ખાલી આવે તો LocalStorage માંથી ઓટોમેટિક કેચ્ડ ડેટા પકડી લેશે
+  useEffect(() => {
+    if (marketData && marketData.length > 0) {
+      setLiveMarketStocks(marketData);
+    } else {
+      const cached = localStorage.getItem('master_cached_market_data');
+      if (cached) {
+        try {
+          setLiveMarketStocks(JSON.parse(cached));
+        } catch (e) {
+          console.log(e);
+        }
+      }
+    }
+  }, [marketData]);
+
+  const buyStocksFromMarket = liveMarketStocks
     .filter(i => i.pct >= 0)
     .map(item => ({
       name: item.symbol,
@@ -23,7 +39,7 @@ export default function SwingTradesModule({ marketData = [] }) {
       desc: 'Gann Support Base Setup'
     }));
 
-  const shortStocksFromMarket = marketData
+  const shortStocksFromMarket = liveMarketStocks
     .filter(i => i.pct < 0)
     .map(item => ({
       name: item.symbol,

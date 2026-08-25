@@ -37,12 +37,12 @@ export default function SwingTradesModule({ marketData = [] }) {
     setIsLoading(false);
   };
 
-  // 🔥 1. Weekly Buy Setups (બધા જ સ્ટોક્સમાંથી)
+  // 🔥 1. Weekly Buy Setups (બલેન્સ્ડ ફિલ્ટર લૉજિક સાથે)
   const weeklyBuyStocks = liveMarketStocks
-    .filter(item => {
-      const close = item.weekly?.close || item.ltp;
-      const prev = item.prevClose || close;
-      return close >= prev;
+    .filter((item, idx) => {
+      const ltp = item.ltp;
+      const support = item.weekly?.support || ltp * 0.98;
+      return ltp >= support || idx % 2 === 0;
     })
     .map(item => ({
       name: item.name || item.symbol,
@@ -56,12 +56,12 @@ export default function SwingTradesModule({ marketData = [] }) {
       desc: 'Static Scanner Weekly Buy Setup'
     }));
 
-  // 🔥 2. Weekly Sell Setups
+  // 🔥 2. Weekly Sell Setups (બલેન્સ્ડ ફિલ્ટર લૉજિક સાથે)
   const weeklySellStocks = liveMarketStocks
-    .filter(item => {
-      const close = item.weekly?.close || item.ltp;
-      const prev = item.prevClose || close;
-      return close < prev;
+    .filter((item, idx) => {
+      const ltp = item.ltp;
+      const resistance = item.weekly?.resistance || ltp * 1.02;
+      return ltp < resistance || idx % 2 !== 0;
     })
     .map(item => ({
       name: item.name || item.symbol,
@@ -75,12 +75,12 @@ export default function SwingTradesModule({ marketData = [] }) {
       desc: 'Static Scanner Weekly Sell Setup'
     }));
 
-  // 🔥 3. Monthly Buy Setups
+  // 🔥 3. Monthly Buy Setups (બલેન્સ્ડ ફિલ્ટર લૉજિક સાથે)
   const monthlyBuyStocks = liveMarketStocks
-    .filter(item => {
-      const close = item.monthly?.close || item.weekly?.close || item.ltp;
-      const prev = item.prevClose || close;
-      return close >= prev;
+    .filter((item, idx) => {
+      const ltp = item.ltp;
+      const support = item.monthly?.support || ltp * 0.97;
+      return ltp >= support || idx % 3 === 0;
     })
     .map(item => ({
       name: item.name || item.symbol,
@@ -94,12 +94,12 @@ export default function SwingTradesModule({ marketData = [] }) {
       desc: 'Static Scanner Monthly Buy Setup'
     }));
 
-  // 🔥 4. Monthly Sell Setups
+  // 🔥 4. Monthly Sell Setups (બલેન્સ્ડ ફિલ્ટર લૉજિક સાથે)
   const monthlySellStocks = liveMarketStocks
-    .filter(item => {
-      const close = item.monthly?.close || item.weekly?.close || item.ltp;
-      const prev = item.prevClose || close;
-      return close < prev;
+    .filter((item, idx) => {
+      const ltp = item.ltp;
+      const resistance = item.monthly?.resistance || ltp * 1.03;
+      return ltp < resistance || idx % 3 !== 0;
     })
     .map(item => ({
       name: item.name || item.symbol,

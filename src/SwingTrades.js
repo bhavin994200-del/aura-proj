@@ -26,11 +26,15 @@ export default function SwingTradesModule({ marketData = [] }) {
     }
   }, [marketData]);
 
-  // 🔥 બટન દબાવવાથી ડાયરેક્ટ બેકેન્ડમાંથી ફુલ સ્કેન ડેટા લાવવા માટેનું ફંક્શન
+  // 🔥 બેકેન્ડના સાચા રાઉટ /scan-static-pivot થી ડેટા લાવવા માટેનું ફંક્શન
   const handleScanLiveMarket = async () => {
     setIsScanning(true);
     try {
-      const res = await fetch('https://aura-proj.onrender.com/scan-full-master');
+      const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols: fullFnoList.slice(0, 35) })
+      });
       const json = await res.json();
       const data = json.data || [];
       if (data.length > 0) {
@@ -46,29 +50,36 @@ export default function SwingTradesModule({ marketData = [] }) {
     setIsScanning(false);
   };
 
-  const buyStocksFromMarket = liveMarketStocks
-    .filter(i => i.pct >= 0)
+  // 🔥 સેફ પર્સન્ટેજ કેલ્ક્યુલેશન સાથે Buy અને Short ફિલ્ટર
+  const formattedStocks = liveMarketStocks.map(item => {
+    const prevClose = item.weekly?.close || item.prevClose || item.ltp;
+    const pct = prevClose ? ((item.ltp - prevClose) / prevClose) * 100 : 0;
+    return { ...item, calculatedPct: pct };
+  });
+
+  const buyStocksFromMarket = formattedStocks
+    .filter(i => i.calculatedPct >= 0)
     .map(item => ({
       name: item.symbol,
       ltp: item.ltp,
       type: 'BUY',
-      sl: Number((item.support * 0.99).toFixed(1)),
+      sl: Number((item.weekly?.support || item.ltp * 0.98).toFixed(1)),
       slDesc: '90° Support SL',
-      target: Number((item.gann?.up?.g180 || item.ltp * 1.05).toFixed(1)),
+      target: Number((item.weekly?.gann?.up?.g180 || item.ltp * 1.05).toFixed(1)),
       targetDesc: '180° Up Target',
       rr: '1 : 4.0',
       desc: 'Gann Support Base Setup'
     }));
 
-  const shortStocksFromMarket = liveMarketStocks
-    .filter(i => i.pct < 0)
+  const shortStocksFromMarket = formattedStocks
+    .filter(i => i.calculatedPct < 0)
     .map(item => ({
       name: item.symbol,
       ltp: item.ltp,
       type: 'SHORT',
-      sl: Number((item.resistance * 1.01).toFixed(1)),
+      sl: Number((item.weekly?.resistance || item.ltp * 1.02).toFixed(1)),
       slDesc: '180° Resistance SL',
-      target: Number((item.gann?.down?.g180 || item.ltp * 0.95).toFixed(1)),
+      target: Number((item.weekly?.gann?.down?.g180 || item.ltp * 0.95).toFixed(1)),
       targetDesc: '180° Down Target',
       rr: '1 : 4.0',
       desc: 'Gann Resistance Rejection'
@@ -157,7 +168,6 @@ export default function SwingTradesModule({ marketData = [] }) {
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* 🔥 નવું સ્કેન બટન */}
           <button 
             onClick={handleScanLiveMarket}
             disabled={isScanning}

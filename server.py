@@ -27,7 +27,6 @@ last_telegram_alerts = {}
 
 
 def send_telegram_alert(symbol, message):
-  """ટેલિગ્રામ બોટ દ્વારા મેસેજ મોકલવાનું ફંક્શન (૧ કલાકના કોલ્ડડાઉન સાથે)"""
   if not TELEGRAM_BOT_TOKEN:
     return
   current_time = datetime.now().timestamp()
@@ -52,7 +51,7 @@ def send_telegram_alert(symbol, message):
     return None
 
 
-# 🔥 Telegram Bot Listener: યુઝર જ્યારે પણ ટેલિગ્રામમાં સ્ટોકનું નામ લખશે ત્યારે આ ચાલશે
+# 🔥 Telegram Bot Listener (ડબલ મેસેજ રોકવા અને પરફેક્ટ ઓફસેટ સાથે)
 async def telegram_bot_listener():
   offset = 0
   while True:
@@ -72,13 +71,12 @@ async def telegram_bot_listener():
             if text == '/START':
               reply = (
                   '👋 સ્વાગત છે Aura Terminal માં!\nગમે તે સ્ટોક કે ઇન્ડેક્સનું'
-                  ' નામ લખો (દા.ત. `RELIANCE`, `NIFTY`, `BANKNIFTY`), એટલે હું'
-                  ' તમને તેના **OpenPrice** અને **Weekly/Monthly Gann Levels**'
-                  ' મોકલી આપીશ.'
+                  ' નામ લખો (દા.ત. `RELIANCE`, `NIFTY`), એટલે હું તમને તેના'
+                  ' **OpenPrice** અને **Weekly/Monthly All Gann Degrees** મોકલી'
+                  ' આપીશ.'
               )
             else:
               sym = text
-              # ટિકર સેટ કરો
               if sym in ['NIFTY', 'FINNIFTY', 'MIDCAPNIFTY']:
                 t_str = '^NSEI'
               elif sym == 'BANKNIFTY':
@@ -114,7 +112,7 @@ async def telegram_bot_listener():
                 )
                 pct = round(((ltp - prev_close) / prev_close) * 100, 2)
 
-                # 1. Open Price Gann Octave Calculation
+                # 1. Open Price Gann Octave
                 base_price = open_price if open_price > 0 else ltp
                 root = math.sqrt(base_price)
                 baseRoot = math.floor(root * 8.0) / 8.0
@@ -129,7 +127,7 @@ async def telegram_bot_listener():
                 sT3 = math.pow(baseRoot - 0.375, 2)
                 sT4 = math.pow(baseRoot - 0.500, 2)
 
-                # 2. Weekly & Monthly Static Pivot Calculation
+                # 2. Weekly Gann Levels (All Degrees)
                 df_weekly = hist.resample('W-FRI').last().dropna()
                 w_close = (
                     float(df_weekly['Close'].iloc[-2])
@@ -137,9 +135,20 @@ async def telegram_bot_listener():
                     else ltp
                 )
                 r_w = math.sqrt(w_close)
-                sup_w = round((r_w - 1.0) ** 2, 2)
-                res_w = round((r_w + 1.0) ** 2, 2)
+                w_up = {
+                    'g45': round((r_w + (45 / 180)) ** 2, 2),
+                    'g90': round((r_w + (90 / 180)) ** 2, 2),
+                    'g180': round((r_w + 1.0) ** 2, 2),
+                    'g360': round((r_w + 2.0) ** 2, 2),
+                }
+                w_down = {
+                    'g45': round((r_w - (45 / 180)) ** 2, 2),
+                    'g90': round((r_w - (90 / 180)) ** 2, 2),
+                    'g180': round((r_w - 1.0) ** 2, 2),
+                    'g360': round((r_w - 2.0) ** 2, 2),
+                }
 
+                # 3. Monthly Gann Levels (All Degrees)
                 df_monthly = hist.resample('ME').last().dropna()
                 m_close = (
                     float(df_monthly['Close'].iloc[-2])
@@ -147,8 +156,18 @@ async def telegram_bot_listener():
                     else ltp
                 )
                 r_m = math.sqrt(m_close)
-                sup_m = round((r_m - 1.0) ** 2, 2)
-                res_m = round((r_m + 1.0) ** 2, 2)
+                m_up = {
+                    'g45': round((r_m + (45 / 180)) ** 2, 2),
+                    'g90': round((r_m + (90 / 180)) ** 2, 2),
+                    'g180': round((r_m + 1.0) ** 2, 2),
+                    'g360': round((r_m + 2.0) ** 2, 2),
+                }
+                m_down = {
+                    'g45': round((r_m - (45 / 180)) ** 2, 2),
+                    'g90': round((r_m - (90 / 180)) ** 2, 2),
+                    'g180': round((r_m - 1.0) ** 2, 2),
+                    'g360': round((r_m - 2.0) ** 2, 2),
+                }
 
                 reply = (
                     f'📊 *Analysis Report: {sym}*\n'
@@ -161,9 +180,16 @@ async def telegram_bot_listener():
                     f'• 🔴 Sell Trigger: ₹{round(sell_lvl, 2)}\n'
                     f'  Targets: ₹{round(sT1, 2)} | ₹{round(sT2, 2)} |'
                     f' ₹{round(sT3, 2)} | ₹{round(sT4, 2)}\n\n'
-                    f'📅 *Static Pivot Levels:*\n'
-                    f'• 📉 *Weekly:* Support ₹{sup_w} | Resistance ₹{res_w}\n'
-                    f'• 📈 *Monthly:* Support ₹{sup_m} | Resistance ₹{res_m}'
+                    f'📅 *Weekly Gann Degrees (Close: ₹{round(w_close, 2)}):*\n'
+                    f'• 🟢 Up: 45°: ₹{w_up["g45"]} | 90°: ₹{w_up["g90"]} |'
+                    f' 180°: ₹{w_up["g180"]} | 360°: ₹{w_up["g360"]}\n'
+                    f'• 🔴 Down: 45°: ₹{w_down["g45"]} | 90°: ₹{w_down["g90"]} |'
+                    f' 180°: ₹{w_down["g180"]} | 360°: ₹{w_down["g360"]}\n\n'
+                    f'📅 *Monthly Gann Degrees (Close: ₹{round(m_close, 2)}):*\n'
+                    f'• 🟢 Up: 45°: ₹{m_up["g45"]} | 90°: ₹{m_up["g90"]} |'
+                    f' 180°: ₹{m_up["g180"]} | 360°: ₹{m_up["g360"]}\n'
+                    f'• 🔴 Down: 45°: ₹{m_down["g45"]} | 90°: ₹{m_down["g90"]} |'
+                    f' 180°: ₹{m_down["g180"]} | 360°: ₹{m_down["g360"]}'
                 )
               else:
                 reply = (

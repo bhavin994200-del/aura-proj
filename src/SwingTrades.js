@@ -8,8 +8,7 @@ export default function SwingTradesModule({ marketData = [] }) {
 
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
-  // 🔥 સ્કેનરના ડેટામાંથી પર્સન્ટેજ મુજબ BUY અને SHORT લિસ્ટ અલગ કરી દીધા છે
-  // સાથે તેમાં ગાન ડિગ્રી (90°/180°) ના લેવલ જોડી દીધા છે
+  // 🔥 લાઈવ માર્કેટ સ્કેનર ડેટામાંથી BUY અને SHORT અલગ કરીએ છીએ
   const buyStocksFromMarket = marketData
     .filter(i => i.pct >= 0)
     .map(item => ({

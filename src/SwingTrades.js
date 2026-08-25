@@ -2,20 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { fullFnoList } from './watchlistData';
 
 export default function SwingTradesModule({ marketData = [] }) {
-  const [subTab, setSubTab] = useState('weekly');
+  const [subTab, setSubTab] = useState('weekly_buy');
   const [selectedStock, setSelectedStock] = useState('');
   const [tradeType, setTradeType] = useState('BUY');
   const [liveMarketStocks, setLiveMarketStocks] = useState(marketData);
-  const [isScanning, setIsScanning] = useState(false);
 
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
-  // 🔥 લાઈવ માર્કેટ ડેટા કે લોકલ સ્ટોરેજ કેચ કરવા માટે
   useEffect(() => {
     if (marketData && marketData.length > 0) {
       setLiveMarketStocks(marketData);
     } else {
-      const cached = localStorage.getItem('master_cached_market_data');
+      const cached = localStorage.getItem('vedicedge_home_market');
       if (cached) {
         try {
           setLiveMarketStocks(JSON.parse(cached));
@@ -26,82 +24,99 @@ export default function SwingTradesModule({ marketData = [] }) {
     }
   }, [marketData]);
 
-  // 🔥 ફિક્સ કરેલું સ્કેન ફંક્શન જે POST રિક્વેસ્ટ દ્વારા ડેટા લાવશે
-  const handleScanLiveMarket = async () => {
-    setIsScanning(true);
-    try {
-      const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: fullFnoList })
-      });
-      const json = await res.json();
-      const data = json.data || [];
-      if (data.length > 0) {
-        setLiveMarketStocks(data);
-        localStorage.setItem('master_cached_market_data', JSON.stringify(data));
-        alert('🚀 Swing setups successfully scanned from live market!');
-      } else {
-        const cachedHome = localStorage.getItem('vedicedge_home_market');
-        if (cachedHome) {
-          const parsed = JSON.parse(cachedHome);
-          setLiveMarketStocks(parsed);
-          alert('🚀 Loaded from local market cache!');
-        } else {
-          alert('No data received from server.');
-        }
-      }
-    } catch (err) {
-      const cachedHome = localStorage.getItem('vedicedge_home_market');
-      if (cachedHome) {
-        setLiveMarketStocks(JSON.parse(cachedHome));
-        alert('🚀 Loaded from local market cache!');
-      } else {
-        alert('Error connecting to backend server for scanning!');
-      }
-    }
-    setIsScanning(false);
-  };
-
-  // 🔥 સેફ પર્સન્ટેજ કેલ્ક્યુલેશન સાથે Buy અને Short ફિલ્ટર
-  const formattedStocks = liveMarketStocks.map(item => {
-    const prevClose = item.weekly?.close || item.prevClose || item.ltp;
-    const pct = prevClose ? ((item.ltp - prevClose) / prevClose) * 100 : 0;
-    return { ...item, calculatedPct: pct };
-  });
-
-  const buyStocksFromMarket = formattedStocks
-    .filter(i => i.calculatedPct >= 0)
+  // 🔥 1. Weekly Buy Setups
+  const weeklyBuyStocks = liveMarketStocks
+    .filter(item => {
+      const close = item.weekly?.close || item.ltp;
+      const prev = item.prevClose || close;
+      return close >= prev;
+    })
     .map(item => ({
-      name: item.symbol,
+      name: item.name || item.symbol,
       ltp: item.ltp,
       type: 'BUY',
       sl: Number((item.weekly?.support || item.ltp * 0.98).toFixed(1)),
-      slDesc: '90° Support SL',
+      slDesc: '90° Weekly Support SL',
       target: Number((item.weekly?.gann?.up?.g180 || item.ltp * 1.05).toFixed(1)),
       targetDesc: '180° Up Target',
       rr: '1 : 4.0',
-      desc: 'Gann Support Base Setup'
+      desc: 'Weekly Gann Support Setup'
     }));
 
-  const shortStocksFromMarket = formattedStocks
-    .filter(i => i.calculatedPct < 0)
+  // 🔥 2. Weekly Sell (Short) Setups
+  const weeklySellStocks = liveMarketStocks
+    .filter(item => {
+      const close = item.weekly?.close || item.ltp;
+      const prev = item.prevClose || close;
+      return close < prev;
+    })
     .map(item => ({
-      name: item.symbol,
+      name: item.name || item.symbol,
       ltp: item.ltp,
       type: 'SHORT',
       sl: Number((item.weekly?.resistance || item.ltp * 1.02).toFixed(1)),
-      slDesc: '180° Resistance SL',
+      slDesc: '180° Weekly Resistance SL',
       target: Number((item.weekly?.gann?.down?.g180 || item.ltp * 0.95).toFixed(1)),
       targetDesc: '180° Down Target',
       rr: '1 : 4.0',
-      desc: 'Gann Resistance Rejection'
+      desc: 'Weekly Gann Resistance Setup'
     }));
 
-  const weeklySetups = [...buyStocksFromMarket, ...customAddedSetups.filter(i => i.type === 'BUY')];
-  const monthlySetups = [...shortStocksFromMarket, ...customAddedSetups.filter(i => i.type === 'SHORT')];
+  // 🔥 3. Monthly Buy Setups
+  const monthlyBuyStocks = liveMarketStocks
+    .filter(item => {
+      const close = item.monthly?.close || item.weekly?.close || item.ltp;
+      const prev = item.prevClose || close;
+      return close >= prev;
+    })
+    .map(item => ({
+      name: item.name || item.symbol,
+      ltp: item.ltp,
+      type: 'BUY',
+      sl: Number((item.monthly?.support || item.ltp * 0.97).toFixed(1)),
+      slDesc: '90° Monthly Support SL',
+      target: Number((item.monthly?.gann?.up?.g180 || item.ltp * 1.08).toFixed(1)),
+      targetDesc: '180° Up Target',
+      rr: '1 : 4.5',
+      desc: 'Monthly Gann Support Setup'
+    }));
 
-  const currentData = subTab === 'weekly' ? weeklySetups : monthlySetups;
+  // 🔥 4. Monthly Sell (Short) Setups
+  const monthlySellStocks = liveMarketStocks
+    .filter(item => {
+      const close = item.monthly?.close || item.weekly?.close || item.ltp;
+      const prev = item.prevClose || close;
+      return close < prev;
+    })
+    .map(item => ({
+      name: item.name || item.symbol,
+      ltp: item.ltp,
+      type: 'SHORT',
+      sl: Number((item.monthly?.resistance || item.ltp * 1.03).toFixed(1)),
+      slDesc: '180° Monthly Resistance SL',
+      target: Number((item.monthly?.gann?.down?.g180 || item.ltp * 0.92).toFixed(1)),
+      targetDesc: '180° Down Target',
+      rr: '1 : 4.5',
+      desc: 'Monthly Gann Resistance Setup'
+    }));
+
+  const weeklyBuySetups = [...weeklyBuyStocks, ...customAddedSetups.filter(i => i.type === 'BUY' && i.duration === 'weekly')];
+  const weeklySellSetups = [...weeklySellStocks, ...customAddedSetups.filter(i => i.type === 'SHORT' && i.duration === 'weekly')];
+  const monthlyBuySetups = [...monthlyBuyStocks, ...customAddedSetups.filter(i => i.type === 'BUY' && i.duration === 'monthly')];
+  const monthlySellSetups = [...monthlySellStocks, ...customAddedSetups.filter(i => i.type === 'SHORT' && i.duration === 'monthly')];
+
+  let currentData = weeklyBuySetups;
+  let currentTitle = '🟢 Weekly Buy Swing Setups';
+  if (subTab === 'weekly_sell') {
+    currentData = weeklySellSetups;
+    currentTitle = '🔴 Weekly Sell Swing Setups';
+  } else if (subTab === 'monthly_buy') {
+    currentData = monthlyBuySetups;
+    currentTitle = '🟢 Monthly Buy Swing Setups';
+  } else if (subTab === 'monthly_sell') {
+    currentData = monthlySellSetups;
+    currentTitle = '🔴 Monthly Sell Swing Setups';
+  }
 
   const handleAddCustomSwing = async (e) => {
     e.preventDefault();
@@ -119,6 +134,7 @@ export default function SwingTradesModule({ marketData = [] }) {
 
       let sl = tradeType === 'BUY' ? Number((currentLtp * 0.985).toFixed(1)) : Number((currentLtp * 1.015).toFixed(1));
       let target = tradeType === 'BUY' ? Number((currentLtp * 1.060).toFixed(1)) : Number((currentLtp * 0.940).toFixed(1));
+      let duration = subTab.includes('monthly') ? 'monthly' : 'weekly';
 
       const newItem = {
         name: cleanSymbol,
@@ -129,7 +145,8 @@ export default function SwingTradesModule({ marketData = [] }) {
         target: target,
         targetDesc: tradeType === 'BUY' ? '360° Mega Target' : '360° Down Target',
         rr: '1 : 4.0',
-        desc: tradeType === 'BUY' ? 'Manual Gann Support Setup' : 'Manual Gann Resistance Setup'
+        desc: 'Manual Custom Setup',
+        duration: duration
       };
 
       setCustomAddedSetups([newItem, ...customAddedSetups]);
@@ -142,7 +159,7 @@ export default function SwingTradesModule({ marketData = [] }) {
 
   const handleCopyForSocial = () => {
     let text = `🚀 *AURA TERMINAL - SWING TRADES* 🚀\n`;
-    text = text + `Mode: ${subTab.toUpperCase()} SWING\n`;
+    text = text + `Mode: ${subTab.toUpperCase()}\n`;
     text = text + `-----------------------------------\n\n`;
 
     currentData.forEach((item, index) => {
@@ -177,36 +194,40 @@ export default function SwingTradesModule({ marketData = [] }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
           <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Real Swing Trades Setup (Degree-Wise)</h2>
-          <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>માર્કેટ સ્કેનરના તમામ લાઈવ સ્ટોક્સ અને ગાન ડિગ્રી લેવલ્સ</p>
+          <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>વીકલી અને મંથલી સ્કેનર ડેટા આધારિત Buy અને Sell સેટઅપ્સ</p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button 
-            onClick={handleScanLiveMarket}
-            disabled={isScanning}
-            style={{ padding: '8px 14px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
-          >
-            {isScanning ? 'Scanning...' : '⚡ Scan Setups'}
-          </button>
-
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button 
             onClick={handleCopyForSocial}
-            style={{ padding: '8px 14px', backgroundColor: '#059669', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+            style={{ padding: '8px 12px', backgroundColor: '#059669', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            📋 Copy All
+            📋 Copy
           </button>
 
           <button 
-            onClick={() => setSubTab('weekly')}
-            style={{ padding: '8px 14px', backgroundColor: subTab === 'weekly' ? '#27272a' : '#e4e4e7', color: subTab === 'weekly' ? '#ffffff' : '#27272a', border: '1px solid #a1a1aa', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+            onClick={() => setSubTab('weekly_buy')}
+            style={{ padding: '8px 12px', backgroundColor: subTab === 'weekly_buy' ? '#27272a' : '#e4e4e7', color: subTab === 'weekly_buy' ? '#ffffff' : '#27272a', border: '1px solid #a1a1aa', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            🟢 Weekly Buy Swing ({weeklySetups.length})
+            🟢 W-Buy ({weeklyBuySetups.length})
           </button>
           <button 
-            onClick={() => setSubTab('monthly')}
-            style={{ padding: '8px 14px', backgroundColor: subTab === 'monthly' ? '#27272a' : '#e4e4e7', color: subTab === 'monthly' ? '#ffffff' : '#27272a', border: '1px solid #a1a1aa', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+            onClick={() => setSubTab('weekly_sell')}
+            style={{ padding: '8px 12px', backgroundColor: subTab === 'weekly_sell' ? '#27272a' : '#e4e4e7', color: subTab === 'weekly_sell' ? '#ffffff' : '#27272a', border: '1px solid #a1a1aa', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            🔴 Monthly Short Swing ({monthlySetups.length})
+            🔴 W-Sell ({weeklySellSetups.length})
+          </button>
+          <button 
+            onClick={() => setSubTab('monthly_buy')}
+            style={{ padding: '8px 12px', backgroundColor: subTab === 'monthly_buy' ? '#27272a' : '#e4e4e7', color: subTab === 'monthly_buy' ? '#ffffff' : '#27272a', border: '1px solid #a1a1aa', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
+          >
+            🟢 M-Buy ({monthlyBuySetups.length})
+          </button>
+          <button 
+            onClick={() => setSubTab('monthly_sell')}
+            style={{ padding: '8px 12px', backgroundColor: subTab === 'monthly_sell' ? '#27272a' : '#e4e4e7', color: subTab === 'monthly_sell' ? '#ffffff' : '#27272a', border: '1px solid #a1a1aa', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
+          >
+            🔴 M-Sell ({monthlySellSetups.length})
           </button>
         </div>
       </div>
@@ -240,7 +261,7 @@ export default function SwingTradesModule({ marketData = [] }) {
         </button>
       </form>
 
-      <TableView data={currentData} title={subTab === 'weekly' ? '🟢 Weekly Buy Swing Setups (All Scanned)' : '🔴 Monthly Short Swing Setups (All Scanned)'} onSelect={handleSelectStock} />
+      <TableView data={currentData} title={currentTitle} onSelect={handleSelectStock} />
     </div>
   );
 }
@@ -255,7 +276,7 @@ function TableView({ data, title, onSelect }) {
 
       <div style={{ maxHeight: '550px', overflowY: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-          <thead style={{ position: 'sticky', top: 0, backgroundColor: '#fafafa', zIndex: 1 }}>
+          <thead style={{ position: 'sticky', top: 0, backgroundColor: '#fafafa', zIndex: '1' }}>
             <tr style={{ borderBottom: '1px solid #e4e4e7', color: '#71717a' }}>
               <th style={{ padding: '12px 20px', width: '90px' }}>Action</th>
               <th style={{ padding: '12px 20px' }}>Symbol & Setup</th>
@@ -268,7 +289,7 @@ function TableView({ data, title, onSelect }) {
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups found. Click "Scan Setups" above!</td>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups found in this category.</td>
               </tr>
             ) : (
               data.map((item, idx) => (

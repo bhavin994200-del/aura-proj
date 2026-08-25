@@ -4,7 +4,7 @@ import BiasCalendar from './BiasCalendar';
 import StaticPivotScanner from './StaticPivotScanner';
 import CalculatorModule from './Calculator';
 import SwingTradesModule from './SwingTrades';
-import OpenPrice from './OpenPrice'; // 🔥 OpenPrice મોડ્યુલ ઇમ્પોર્ટ કર્યું
+import OpenPrice from './OpenPrice';
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -55,6 +55,7 @@ function App() {
     return sum;
   }
 
+  // 🔥 5 Seconds Global Auto-Refresh for Header Indices & VIX
   useEffect(() => {
     const fetchAllIndices = async () => {
       const symbols = ['NIFTY', 'BANKNIFTY', 'SENSEX'];
@@ -91,7 +92,7 @@ function App() {
     };
 
     fetchAllIndices();
-    const interval = setInterval(fetchAllIndices, 10000);
+    const interval = setInterval(fetchAllIndices, 5000); // 5 Seconds
     return () => clearInterval(interval);
   }, []);
 
@@ -178,6 +179,7 @@ function HomeDashboard({ marketData, setMarketData }) {
   const [alerts, setAlerts] = useState({});
   const [alertInputs, setAlertInputs] = useState({});
 
+  // 🔥 5 Seconds Auto-Refresh for Home Dashboard LTP
   useEffect(() => {
     const updateHomeMarketPrices = async () => {
       if (!marketData || marketData.length === 0) return;
@@ -223,7 +225,7 @@ function HomeDashboard({ marketData, setMarketData }) {
       localStorage.setItem('vedicedge_home_market', JSON.stringify(updatedList));
     };
 
-    const interval = setInterval(updateHomeMarketPrices, 10000);
+    const interval = setInterval(updateHomeMarketPrices, 5000); // 5 Seconds
     return () => clearInterval(interval);
   }, [marketData, setMarketData]);
 
@@ -535,8 +537,11 @@ function WatchlistModule() {
     setLoading(false);
   };
 
+  // 🔥 5 Seconds Auto-Refresh for Watchlist Data
   useEffect(() => { 
     fetchWatchlistData(); 
+    const interval = setInterval(fetchWatchlistData, 5000); // 5 Seconds
+    return () => clearInterval(interval);
   }, [watchlist]);
 
   return (

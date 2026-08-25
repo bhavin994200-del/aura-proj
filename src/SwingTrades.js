@@ -6,10 +6,11 @@ export default function SwingTradesModule({ marketData = [] }) {
   const [selectedStock, setSelectedStock] = useState('');
   const [tradeType, setTradeType] = useState('BUY');
   const [liveMarketStocks, setLiveMarketStocks] = useState(marketData);
+  const [isScanning, setIsScanning] = useState(false);
 
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
-  // 🔥 જો બહારથી marketData ખાલી આવે તો LocalStorage માંથી ઓટોમેટિક કેચ્ડ ડેટા પકડી લેશે
+  // 🔥 લાઈવ માર્કેટ ડેટા કે લોકલ સ્ટોરેજ કેચ કરવા માટે
   useEffect(() => {
     if (marketData && marketData.length > 0) {
       setLiveMarketStocks(marketData);
@@ -24,6 +25,26 @@ export default function SwingTradesModule({ marketData = [] }) {
       }
     }
   }, [marketData]);
+
+  // 🔥 બટન દબાવવાથી ડાયરેક્ટ બેકેન્ડમાંથી ફુલ સ્કેન ડેટા લાવવા માટેનું ફંક્શન
+  const handleScanLiveMarket = async () => {
+    setIsScanning(true);
+    try {
+      const res = await fetch('https://aura-proj.onrender.com/scan-full-master');
+      const json = await res.json();
+      const data = json.data || [];
+      if (data.length > 0) {
+        setLiveMarketStocks(data);
+        localStorage.setItem('master_cached_market_data', JSON.stringify(data));
+        alert('🚀 Swing setups successfully scanned from live market!');
+      } else {
+        alert('No data received from server.');
+      }
+    } catch (err) {
+      alert('Error connecting to backend server for scanning!');
+    }
+    setIsScanning(false);
+  };
 
   const buyStocksFromMarket = liveMarketStocks
     .filter(i => i.pct >= 0)
@@ -136,6 +157,15 @@ export default function SwingTradesModule({ marketData = [] }) {
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* 🔥 નવું સ્કેન બટન */}
+          <button 
+            onClick={handleScanLiveMarket}
+            disabled={isScanning}
+            style={{ padding: '8px 14px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            {isScanning ? 'Scanning...' : '⚡ Scan Setups'}
+          </button>
+
           <button 
             onClick={handleCopyForSocial}
             style={{ padding: '8px 14px', backgroundColor: '#059669', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
@@ -215,7 +245,7 @@ function TableView({ data, title, onSelect }) {
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups found. Run full market scan first!</td>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups found. Click "Scan Setups" above!</td>
               </tr>
             ) : (
               data.map((item, idx) => (

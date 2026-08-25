@@ -267,7 +267,7 @@ function App() {
         <div style={{ padding: '30px', flex: 1, overflowY: 'auto', backgroundColor: '#e4e4e7' }}>
           {activeTab === 'home' && <HomeDashboard marketData={marketData} setMarketData={setMarketData} />}
           {activeTab === 'openPrice' && <OpenPrice />}
-          {activeTab === 'swingTrades' && <SwingTradesModule />}
+          {activeTab === 'swingTrades' && <SwingTradesModule marketData={marketData} />}
           {activeTab === 'scanner' && <StaticPivotScanner />}
           {activeTab === 'biasCalendar' && <BiasCalendar />}
           {activeTab === 'calculator' && <CalculatorModule />}

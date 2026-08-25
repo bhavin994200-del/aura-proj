@@ -1,28 +1,48 @@
 import React, { useState } from 'react';
 import { fullFnoList } from './watchlistData';
 
-export default function SwingTradesModule() {
+export default function SwingTradesModule({ marketData = [] }) {
   const [subTab, setSubTab] = useState('weekly');
   const [selectedStock, setSelectedStock] = useState('');
   const [tradeType, setTradeType] = useState('BUY');
 
-  // રિયલ અને પરફેક્ટ સ્વિંગ સેટઅપ્સનું પ્રી-ડિફાઇન લિસ્ટ (જ્યાં બેસ્ટ ટ્રેડ બનતા હોય)
-  const [weeklySetups, setWeeklySetups] = useState([
-    { name: 'RELIANCE', ltp: 2850.0, type: 'BUY', sl: 2815.0, target: 3020.0, rr: '1 : 4.8', desc: '90° Support Bounce' },
-    { name: 'TCS', ltp: 4120.0, type: 'SHORT', sl: 4175.0, target: 3910.0, rr: '1 : 3.8', desc: '180° Resistance Rejection' },
-    { name: 'BANKNIFTY', ltp: 57650.0, type: 'BUY', sl: 56900.0, target: 60500.0, rr: '1 : 3.7', desc: 'Monthly Support Accumulation' },
-    { name: 'INFY', ltp: 1850.0, type: 'SHORT', sl: 1885.0, target: 1720.0, rr: '1 : 3.7', desc: 'Trendline Rejection' }
-  ]);
+  const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
-  const [monthlySetups, setMonthlySetups] = useState([
-    { name: 'NIFTY', ltp: 24250.0, type: 'BUY', sl: 23850.0, target: 26000.0, rr: '1 : 4.3', desc: '360° Full Cycle Support' },
-    { name: 'ICICIBANK', ltp: 1240.0, type: 'BUY', sl: 1215.0, target: 1350.0, rr: '1 : 5.2', desc: 'Gann Square Breakout' },
-    { name: 'SBIN', ltp: 810.0, type: 'SHORT', sl: 830.0, target: 730.0, rr: '1 : 4.0', desc: 'Distribution Zone' }
-  ]);
+  // 🔥 સ્કેનરના ડેટામાંથી પર્સન્ટેજ મુજબ BUY અને SHORT લિસ્ટ અલગ કરી દીધા છે
+  // સાથે તેમાં ગાન ડિગ્રી (90°/180°) ના લેવલ જોડી દીધા છે
+  const buyStocksFromMarket = marketData
+    .filter(i => i.pct >= 0)
+    .map(item => ({
+      name: item.symbol,
+      ltp: item.ltp,
+      type: 'BUY',
+      sl: Number((item.support * 0.99).toFixed(1)),
+      slDesc: '90° Support SL',
+      target: Number((item.gann?.up?.g180 || item.ltp * 1.05).toFixed(1)),
+      targetDesc: '180° Up Target',
+      rr: '1 : 4.0',
+      desc: 'Gann Support Base Setup'
+    }));
+
+  const shortStocksFromMarket = marketData
+    .filter(i => i.pct < 0)
+    .map(item => ({
+      name: item.symbol,
+      ltp: item.ltp,
+      type: 'SHORT',
+      sl: Number((item.resistance * 1.01).toFixed(1)),
+      slDesc: '180° Resistance SL',
+      target: Number((item.gann?.down?.g180 || item.ltp * 0.95).toFixed(1)),
+      targetDesc: '180° Down Target',
+      rr: '1 : 4.0',
+      desc: 'Gann Resistance Rejection'
+    }));
+
+  const weeklySetups = [...buyStocksFromMarket, ...customAddedSetups.filter(i => i.type === 'BUY')];
+  const monthlySetups = [...shortStocksFromMarket, ...customAddedSetups.filter(i => i.type === 'SHORT')];
 
   const currentData = subTab === 'weekly' ? weeklySetups : monthlySetups;
 
-  // નવો રિયલ સેટઅપ જાતે એડ કરવા માટેનું ફંક્શન
   const handleAddCustomSwing = async (e) => {
     e.preventDefault();
     if (!selectedStock) return;
@@ -39,23 +59,20 @@ export default function SwingTradesModule() {
 
       let sl = tradeType === 'BUY' ? Number((currentLtp * 0.985).toFixed(1)) : Number((currentLtp * 1.015).toFixed(1));
       let target = tradeType === 'BUY' ? Number((currentLtp * 1.060).toFixed(1)) : Number((currentLtp * 0.940).toFixed(1));
-      let rr = tradeType === 'BUY' ? '1 : 4.0' : '1 : 4.0';
 
       const newItem = {
         name: cleanSymbol,
         ltp: currentLtp,
         type: tradeType,
         sl: sl,
+        slDesc: tradeType === 'BUY' ? '45° Support SL' : '45° Resistance SL',
         target: target,
-        rr: rr,
-        desc: tradeType === 'BUY' ? 'Gann Support Setup' : 'Gann Resistance Setup'
+        targetDesc: tradeType === 'BUY' ? '360° Mega Target' : '360° Down Target',
+        rr: '1 : 4.0',
+        desc: tradeType === 'BUY' ? 'Manual Gann Support Setup' : 'Manual Gann Resistance Setup'
       };
 
-      if (subTab === 'weekly') {
-        setWeeklySetups([newItem, ...weeklySetups]);
-      } else {
-        setMonthlySetups([newItem, ...monthlySetups]);
-      }
+      setCustomAddedSetups([newItem, ...customAddedSetups]);
       setSelectedStock('');
       alert(`Real swing setup added for ${cleanSymbol}!`);
     } catch (err) {
@@ -70,10 +87,10 @@ export default function SwingTradesModule() {
 
     currentData.forEach((item, index) => {
       text = text + `${index + 1}. *${item.name}* (${item.type})\n`;
-      text = text + `   LTP: ₹ ${item.ltp}\n`;
-      text = text + `   SL: ₹ ${item.sl}\n`;
-      text = text + `   Target: ₹ ${item.target}\n`;
-      text = text + `   R:R: ${item.rr}\n\n`;
+      text = text + `    LTP: ₹ ${item.ltp}\n`;
+      text = text + `    SL: ₹ ${item.sl} (${item.slDesc})\n`;
+      text = text + `    Target: ₹ ${item.target} (${item.targetDesc})\n`;
+      text = text + `    R:R: ${item.rr}\n\n`;
     });
 
     navigator.clipboard.writeText(text);
@@ -99,53 +116,29 @@ export default function SwingTradesModule() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Real Swing Trades Setup</h2>
-          <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>Tight SL & Big Target setups for high-probability swings</p>
+          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Real Swing Trades Setup (Degree-Wise)</h2>
+          <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>માર્કેટ સ્કેનરના તમામ લાઈવ સ્ટોક્સ અને ગાન ડિગ્રી લેવલ્સ</p>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button 
             onClick={handleCopyForSocial}
-            style={{
-              padding: '8px 14px',
-              backgroundColor: '#059669',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
+            style={{ padding: '8px 14px', backgroundColor: '#059669', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
           >
-            📋 Copy
+            📋 Copy All
           </button>
 
           <button 
             onClick={() => setSubTab('weekly')}
-            style={{
-              padding: '8px 14px',
-              backgroundColor: subTab === 'weekly' ? '#27272a' : '#e4e4e7',
-              color: subTab === 'weekly' ? '#ffffff' : '#27272a',
-              border: '1px solid #a1a1aa',
-              borderRadius: '6px',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
+            style={{ padding: '8px 14px', backgroundColor: subTab === 'weekly' ? '#27272a' : '#e4e4e7', color: subTab === 'weekly' ? '#ffffff' : '#27272a', border: '1px solid #a1a1aa', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
           >
-            ⏳ Weekly Swing (5-7 Days)
+            🟢 Weekly Buy Swing ({weeklySetups.length})
           </button>
           <button 
             onClick={() => setSubTab('monthly')}
-            style={{
-              padding: '8px 14px',
-              backgroundColor: subTab === 'monthly' ? '#27272a' : '#e4e4e7',
-              color: subTab === 'monthly' ? '#ffffff' : '#27272a',
-              border: '1px solid #a1a1aa',
-              borderRadius: '6px',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
+            style={{ padding: '8px 14px', backgroundColor: subTab === 'monthly' ? '#27272a' : '#e4e4e7', color: subTab === 'monthly' ? '#ffffff' : '#27272a', border: '1px solid #a1a1aa', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
           >
-            📅 Monthly Swing
+            🔴 Monthly Short Swing ({monthlySetups.length})
           </button>
         </div>
       </div>
@@ -175,11 +168,11 @@ export default function SwingTradesModule() {
         </select>
 
         <button type="submit" style={{ padding: '9px 20px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-          + Add Setup
+          + Add Custom Setup
         </button>
       </form>
 
-      <TableView data={currentData} title={subTab === 'weekly' ? '🟢 Weekly Real Swing Setups' : '📅 Monthly Real Swing Setups'} onSelect={handleSelectStock} />
+      <TableView data={currentData} title={subTab === 'weekly' ? '🟢 Weekly Buy Swing Setups (All Scanned)' : '🔴 Monthly Short Swing Setups (All Scanned)'} onSelect={handleSelectStock} />
     </div>
   );
 }
@@ -192,51 +185,59 @@ function TableView({ data, title, onSelect }) {
         <span style={{ fontSize: '13px', color: '#52525b', fontWeight: 'normal' }}>{data.length} Active Setups</span>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-        <thead>
-          <tr style={{ backgroundColor: '#fafafa', borderBottom: '1px solid #e4e4e7', color: '#71717a' }}>
-            <th style={{ padding: '12px 20px', width: '90px' }}>Action</th>
-            <th style={{ padding: '12px 20px' }}>Symbol & Setup</th>
-            <th style={{ padding: '12px 20px' }}>LTP</th>
-            <th style={{ padding: '12px 20px' }}>Stop-Loss (SL)</th>
-            <th style={{ padding: '12px 20px' }}>Target</th>
-            <th style={{ padding: '12px 20px' }}>Risk : Reward</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.length === 0 ? (
-            <tr>
-              <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups. Use the form above to add one.</td>
+      <div style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+          <thead style={{ position: 'sticky', top: 0, backgroundColor: '#fafafa', zIndex: 1 }}>
+            <tr style={{ borderBottom: '1px solid #e4e4e7', color: '#71717a' }}>
+              <th style={{ padding: '12px 20px', width: '90px' }}>Action</th>
+              <th style={{ padding: '12px 20px' }}>Symbol & Setup</th>
+              <th style={{ padding: '12px 20px' }}>LTP</th>
+              <th style={{ padding: '12px 20px' }}>Stop-Loss (SL)</th>
+              <th style={{ padding: '12px 20px' }}>Target</th>
+              <th style={{ padding: '12px 20px' }}>Risk : Reward</th>
             </tr>
-          ) : (
-            data.map((item, idx) => (
-              <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                <td style={{ padding: '12px 20px' }}>
-                  <button 
-                    onClick={() => onSelect(item.name)}
-                    style={{ padding: '5px 10px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
-                  >
-                    + Select
-                  </button>
-                </td>
-                <td style={{ padding: '14px 20px' }}>
-                  <div style={{ fontWeight: 'bold', color: '#18181b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {item.name} 
-                    <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', backgroundColor: item.type === 'BUY' ? '#dcfce7' : '#fee2e2', color: item.type === 'BUY' ? '#15803d' : '#b91c1c' }}>
-                      {item.type}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#71717a', fontStyle: 'italic', marginTop: '2px' }}>{item.desc}</div>
-                </td>
-                <td style={{ padding: '14px 20px', color: '#27272a', fontWeight: 'bold' }}>₹ {item.ltp}</td>
-                <td style={{ padding: '14px 20px', color: '#b91c1c', fontWeight: '600' }}>₹ {item.sl}</td>
-                <td style={{ padding: '14px 20px', color: '#15803d', fontWeight: '600' }}>₹ {item.target}</td>
-                <td style={{ padding: '14px 20px', fontWeight: 'bold', color: '#2563eb' }}>{item.rr}</td>
+          </thead>
+          <tbody>
+            {data.length === 0 ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups found. Run full market scan first!</td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : (
+              data.map((item, idx) => (
+                <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: '12px 20px' }}>
+                    <button 
+                      onClick={() => onSelect(item.name)}
+                      style={{ padding: '5px 10px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                    >
+                      + Select
+                    </button>
+                  </td>
+                  <td style={{ padding: '14px 20px' }}>
+                    <div style={{ fontWeight: 'bold', color: '#18181b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {item.name} 
+                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', backgroundColor: item.type === 'BUY' ? '#dcfce7' : '#fee2e2', color: item.type === 'BUY' ? '#15803d' : '#b91c1c' }}>
+                        {item.type}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#71717a', fontStyle: 'italic', marginTop: '2px' }}>{item.desc}</div>
+                  </td>
+                  <td style={{ padding: '14px 20px', color: '#27272a', fontWeight: 'bold' }}>₹ {item.ltp}</td>
+                  <td style={{ padding: '14px 20px', color: '#b91c1c', fontWeight: '600' }}>
+                    ₹ {item.sl}
+                    <div style={{ fontSize: '11px', fontWeight: 'normal', color: '#b91c1c' }}>({item.slDesc})</div>
+                  </td>
+                  <td style={{ padding: '14px 20px', color: '#15803d', fontWeight: '600' }}>
+                    ₹ {item.target}
+                    <div style={{ fontSize: '11px', fontWeight: 'normal', color: '#15803d' }}>({item.targetDesc})</div>
+                  </td>
+                  <td style={{ padding: '14px 20px', fontWeight: 'bold', color: '#2563eb' }}>{item.rr}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

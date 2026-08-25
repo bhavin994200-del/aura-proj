@@ -89,7 +89,7 @@ function OpenPrice() {
     setLoading(false);
   };
 
-  // ફક્ત લાઈવ LTP અપડેટ કરવા માટેનું ફંક્શન (ક્લાઉડ લાઈવ બેકેન્ડ સાથે)
+  // ફક્ત લાઈવ LTP અને વાસ્તવિક ક્રોસઓવર અપડેટ કરવા માટેનું ફંક્શન
   const updateLiveLtpOnly = async () => {
     if (marketData.length === 0) return;
     try {
@@ -110,10 +110,10 @@ function OpenPrice() {
           prevList.map(oldItem => {
             const found = updatedList.find(newItem => newItem.symbol === oldItem.symbol);
             if (found) {
-              const oldStatus = previousStatusRef.current[oldItem.symbol] || 'RANGE';
+              const oldStatus = oldItem.status; 
               const newStatus = found.status;
 
-              // જો સ્ટોક RANGE માંથી BUY કે SELL થાય તો જ સાઉન્ડ અને ટ્રેડ બુકમાં એન્ટ્રી પડે
+              // જો અગાઉ RANGE હતું અને હવે વાસ્તવમાં BUY કે SELL થયું, તો જ નવો ટ્રીગર ગણવો
               if (oldStatus === 'RANGE' && (newStatus === 'BUY' || newStatus === 'SELL')) {
                 playBeepSound(newStatus);
                 hasNewTrigger = true;
@@ -127,10 +127,29 @@ function OpenPrice() {
                   triggerPrice: triggerPriceVal,
                   entryLtp: found.ltp
                 });
+
+                previousStatusRef.current[found.symbol] = newStatus;
+
+                return {
+                  ...oldItem,
+                  ltp: found.ltp,
+                  status: newStatus,
+                  statusBg: found.statusBg,
+                  statusColor: found.statusColor,
+                  statusText: found.statusText,
+                  triggeredAt: Date.now() // નવું ટ્રીગર થવાનો સમય નોંધવા માટે જેથી લિસ્ટમાં ક્રમ જળવાઈ રહે
+                };
               }
 
-              previousStatusRef.current[found.symbol] = newStatus;
+              // જો પહેલેથી BUY કે SELL થઈ ગયેલું હોય, તો સ્ટેટ બદલાવું ન જોઈએ (Lock રહેવું જોઈએ)
+              if (oldStatus === 'BUY' || oldStatus === 'SELL') {
+                return {
+                  ...oldItem,
+                  ltp: found.ltp // માત્ર લાઈવ LTP જ ફરશે, સ્ટેટ નહીં બદલાય
+                };
+              }
 
+              // બાકીના કેસમાં સામાન્ય અપડેટ
               return {
                 ...oldItem,
                 ltp: found.ltp,
@@ -152,19 +171,19 @@ function OpenPrice() {
 
         setLastUpdated(timeStr);
       }
-    } catch (err) {
+    }catch (err) {
       console.log("Live LTP update error");
     }
   };
 
   useEffect(() => {
     fetchAllOpenPrices();
-    // દર 10 સેકન્ડે ફક્ત LTP ઓટોમેટિક અપડેટ થશે
+    // દર 10 સેકન્ડે ફક્ત LTP અને વાસ્તવિક ક્રોસઓવર ચેક થશે
     const interval = setInterval(updateLiveLtpOnly, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // સોર્ટિંગ લૉજિક: BUY અથવા SELL વાળા સ્ટોક્સ સૌથી ઉપર આવશે, બાકી ABCD મુજબ રહેશે
+  // સોર્ટિંગ લૉજિક: ABCD કાઢી નાખ્યું છે. જે સૌથી પહેલા BUY કે SELL થશે તે સૌથી ઉપર આવશે, પછી નવા આવતા જશે.
   const filteredList = marketData
     .filter(item => {
       const matchesSearch = item.symbol.toLowerCase().includes(searchTerm.toLowerCase());
@@ -182,9 +201,11 @@ function OpenPrice() {
       const pB = getPriority(b.status);
 
       if (pA !== pB) {
-        return pA - pB; // પેલા BUY કે SELL વાળા ઉપર આવશે
+        return pA - pB; // BUY અથવા SELL પેલા ઉપર આવશે, પછી RANGE
       }
-      return a.symbol.localeCompare(b.symbol); // બાકી ABCD મુજબ
+
+      // જો બંનેનું સ્ટેટ સરખું હોય (દા.ત. બંને BUY હોય), તો જે નવું ટ્રીગર આવ્યું હોય તે ઉપર આવશે
+      return (b.triggeredAt || 0) - (a.triggeredAt || 0);
     });
 
   const buyCount = marketData.filter(i => i.status === 'BUY').length;

@@ -1,4 +1,5 @@
 import calendar
+from datetime import datetime
 import math
 import warnings
 from fastapi import FastAPI, Request
@@ -21,10 +22,21 @@ app.add_middleware(
 # 🔥 Telegram Credentials Configuration
 TELEGRAM_BOT_TOKEN = '8958353388:AAGEz1FlbMauc7WUEZUijuc24OGHwTuDLXI'
 TELEGRAM_CHAT_ID = '6778191879'
+last_telegram_alerts = {}
 
 
-def send_telegram_alert(message):
-  """ટેલિગ્રામ બોટ દ્વારા મેસેજ મોકલવાનું ફંક્શન"""
+def send_telegram_alert(symbol, message):
+  """ટેલિગ્રામ બોટ દ્વારા મેસેજ મોકલવાનું ફંક્શન (૧ કલાકના કોલ્ડડાઉન સાથે)"""
+  if not TELEGRAM_BOT_TOKEN:
+    return
+  current_time = datetime.now().timestamp()
+
+  # 🔥 જો છેલ્લા ૧ કલાક (3600 સેકન્ડ) માં આ જ સ્ટોકનું એલર્ટ ગયું હોય તો ફરી નહીં જાય
+  if symbol in last_telegram_alerts and (
+      current_time - last_telegram_alerts[symbol] < 3600
+  ):
+    return
+
   url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
   payload = {
       'chat_id': TELEGRAM_CHAT_ID,
@@ -32,7 +44,8 @@ def send_telegram_alert(message):
       'parse_mode': 'Markdown',
   }
   try:
-    response = requests.post(url, json=payload)
+    response = requests.post(url, json=payload, timeout=5)
+    last_telegram_alerts[symbol] = current_time
     return response.json()
   except Exception as e:
     print('Telegram Error:', e)
@@ -231,7 +244,8 @@ async def calculate_stock(item: dict):
 @app.get('/test-telegram')
 async def test_telegram():
   res = send_telegram_alert(
-      '🚀 *Aura Terminal Alert*\nTest message from backend successfully sent!'
+      'TEST',
+      '🚀 *Aura Terminal Alert*\nTest message from backend successfully sent!',
   )
   return {'status': 'success', 'response': res}
 
@@ -311,18 +325,20 @@ async def scan_open_price(item: dict):
         statusBg = '#dcfce7'
         statusColor = '#166534'
         statusText = '🟢 Buy Above Trigger'
-        # 🔥 જો બાય લેવલ ક્રોસ થાય તો ટેલિગ્રામ પર ઓટોમેટિક એલર્ટ મોકલો
         send_telegram_alert(
-            f'🟢 *BUY ALERT*\nStock: *{sym}*\nLTP: ₹{ltp}\nTrigger Level: ₹{buy_lvl}'
+            sym,
+            f'🟢 *BUY ALERT*\nStock: *{sym}*\nLTP: ₹{ltp}\nTrigger Level:'
+            f' ₹{buy_lvl}',
         )
       elif ltp < sell_lvl:
         status = 'SELL'
         statusBg = '#fee2e2'
         statusColor = '#991b1b'
         statusText = '🔴 Sell Below Trigger'
-        # 🔥 જો સેલ લેવલ તોડે તો ટેલિગ્રામ પર ઓટોમેટિક એલર્ટ મોકલો
         send_telegram_alert(
-            f'🔴 *SELL ALERT*\nStock: *{sym}*\nLTP: ₹{ltp}\nTrigger Level: ₹{sell_lvl}'
+            sym,
+            f'🔴 *SELL ALERT*\nStock: *{sym}*\nLTP: ₹{ltp}\nTrigger Level:'
+            f' ₹{sell_lvl}',
         )
 
       data.append({

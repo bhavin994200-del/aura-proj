@@ -3,7 +3,7 @@ import calendar
 from datetime import datetime
 import math
 import warnings
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 import swisseph as swe
@@ -218,6 +218,36 @@ async def telegram_bot_listener():
 async def startup_event():
   asyncio.create_task(telegram_bot_listener())
   print('🟢 Telegram Bot Listener Started Successfully!')
+
+
+# 🔥 WebSocket Connection Manager & Endpoint (Error 500 Fix)
+class ConnectionManager:
+
+  def __init__(self):
+    self.active_connections: list[WebSocket] = []
+
+  async def connect(self, websocket: WebSocket):
+    await websocket.accept()
+    self.active_connections.append(websocket)
+
+  def disconnect(self, websocket: WebSocket):
+    self.active_connections.remove(websocket)
+
+
+manager = ConnectionManager()
+
+
+@app.websocket('/ws/market-live')
+async def websocket_endpoint(websocket: WebSocket):
+  await manager.connect(websocket)
+  try:
+    while True:
+      # Static pivot scanner data format as live payload
+      res_data = await scan_static_pivot(Request(scope={'type': 'http'}))
+      await websocket.send_json(res_data)
+      await asyncio.sleep(5)
+  except WebSocketDisconnect:
+    manager.disconnect(websocket)
 
 
 rashi_names = [

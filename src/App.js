@@ -55,45 +55,73 @@ function App() {
     return sum;
   }
 
-  // 🔥 5 Seconds Global Auto-Refresh for Header Indices & VIX
+  // 🔥 WebSocket Live Market Connection (ઇન્સ્ટન્ટ લાઈવ અપડેટ માટે)
   useEffect(() => {
-    const fetchAllIndices = async () => {
-      const symbols = ['NIFTY', 'BANKNIFTY', 'SENSEX'];
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    // જો લોકલ રન કરતા હોવ તો ws://127.0.0.1:8000/ws/market-live અને લાઈવ માટે પ્રોજેક્ટ યુઆરએલ
+    const wsUrl = `${wsProtocol}aura-proj.onrender.com/ws/market-live`;
+    
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log("🟢 WebSocket Connected Successfully!");
+    };
+
+    ws.onmessage = (event) => {
       try {
-        const results = await Promise.all(symbols.map(async (sym) => {
-          const res = await fetch('https://aura-proj.onrender.com/calculate-stock', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ stock_symbol: sym })
-          });
-          const data = await res.json();
-          return {
-            name: sym,
-            ltp: data.ltp || 0,
-            prevClose: data.prev_close || 0
-          };
-        }));
-        setIndices(results);
+        const response = JSON.parse(event.data);
+        if (response && response.data) {
+          const liveList = response.data;
 
-        const vixRes = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ symbols: ['NIFTY'] })
-        });
-        const vixJson = await vixRes.json();
-        if (vixJson && vixJson.india_vix) {
-          setIndiaVix(vixJson.india_vix);
+          // Header Indices Update (NIFTY, BANKNIFTY, SENSEX)
+          setIndices(prevIndices => prevIndices.map(ind => {
+            const found = liveList.find(item => item.symbol === ind.name);
+            if (found && found.ltp) {
+              return { ...ind, ltp: found.ltp };
+            }
+            return ind;
+          }));
+
+          // Home Dashboard Market Data Update
+          setMarketData(prevMarket => prevMarket.map(item => {
+            const found = liveList.find(i => i.symbol === item.name);
+            if (found && found.ltp) {
+              const spotLtp = found.ltp;
+              const prevClose = found.prev_close || item.prevClose;
+              const spotDiff = spotLtp - prevClose;
+              const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
+
+              return {
+                ...item,
+                ltp: spotLtp,
+                spotChange: Math.abs(spotDiff).toFixed(2),
+                spotChangePct: Math.abs(spotPct).toFixed(2),
+                prevClose: prevClose,
+                high: found.high || item.high,
+                low: found.low || item.low
+              };
+            }
+            return item;
+          }));
+
+          setLastUpdated(new Date().toLocaleTimeString());
         }
-
-        setLastUpdated(new Date().toLocaleTimeString());
       } catch (err) {
-        console.log("Live header fetch error");
+        console.log("WebSocket message parse error:", err);
       }
     };
 
-    fetchAllIndices();
-    const interval = setInterval(fetchAllIndices, 5000); // 5 Seconds
-    return () => clearInterval(interval);
+    ws.onerror = (error) => {
+      console.log("WebSocket error:", error);
+    };
+
+    ws.onclose = () => {
+      console.log("🔴 WebSocket Disconnected. Retrying...");
+    };
+
+    return () => {
+      ws.close();
+    };
   }, []);
 
   return (
@@ -178,56 +206,6 @@ function HomeDashboard({ marketData, setMarketData }) {
   
   const [alerts, setAlerts] = useState({});
   const [alertInputs, setAlertInputs] = useState({});
-
-  // 🔥 5 Seconds Auto-Refresh for Home Dashboard LTP
-  useEffect(() => {
-    const updateHomeMarketPrices = async () => {
-      if (!marketData || marketData.length === 0) return;
-      
-      const updatedList = await Promise.all(marketData.map(async (item) => {
-        try {
-          const res = await fetch('https://aura-proj.onrender.com/calculate-stock', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ stock_symbol: item.name })
-          });
-          const data = await res.json();
-          if (data && data.ltp) {
-            const spotLtp = data.ltp;
-            const prevClose = data.prev_close || item.prevClose;
-            const spotDiff = spotLtp - prevClose;
-            const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
-
-            const futPrice = data.futures_price || Number((spotLtp * 1.003).toFixed(2));
-            const futDiff = futPrice - prevClose;
-            const futPct = prevClose ? (futDiff / prevClose) * 100 : 0;
-
-            return {
-              ...item,
-              ltp: spotLtp,
-              futuresPrice: futPrice,
-              spotChange: Math.abs(spotDiff).toFixed(2),
-              spotChangePct: Math.abs(spotPct).toFixed(2),
-              futChange: Math.abs(futDiff).toFixed(2),
-              futChangePct: Math.abs(futPct).toFixed(2),
-              prevClose: prevClose,
-              high: data.high || item.high,
-              low: data.low || item.low
-            };
-          }
-          return item;
-        } catch (e) {
-          return item;
-        }
-      }));
-
-      setMarketData(updatedList);
-      localStorage.setItem('vedicedge_home_market', JSON.stringify(updatedList));
-    };
-
-    const interval = setInterval(updateHomeMarketPrices, 5000); // 5 Seconds
-    return () => clearInterval(interval);
-  }, [marketData, setMarketData]);
 
   useEffect(() => {
     marketData.forEach(item => {
@@ -537,11 +515,8 @@ function WatchlistModule() {
     setLoading(false);
   };
 
-  // 🔥 5 Seconds Auto-Refresh for Watchlist Data
   useEffect(() => { 
     fetchWatchlistData(); 
-    const interval = setInterval(fetchWatchlistData, 5000); // 5 Seconds
-    return () => clearInterval(interval);
   }, [watchlist]);
 
   return (

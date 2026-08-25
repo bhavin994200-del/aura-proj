@@ -55,10 +55,9 @@ function App() {
     return sum;
   }
 
-  // 🔥 WebSocket Live Market Connection (ઇન્સ્ટન્ટ લાઈવ અપડેટ માટે)
+  // 🔥 WebSocket Live Market Connection (Home Dashboard & Header Instant Update)
   useEffect(() => {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    // જો લોકલ રન કરતા હોવ તો ws://127.0.0.1:8000/ws/market-live અને લાઈવ માટે પ્રોજેક્ટ યુઆરએલ
     const wsUrl = `${wsProtocol}aura-proj.onrender.com/ws/market-live`;
     
     const ws = new WebSocket(wsUrl);
@@ -70,23 +69,26 @@ function App() {
     ws.onmessage = (event) => {
       try {
         const response = JSON.parse(event.data);
-        if (response && response.data) {
-          const liveList = response.data;
-
-          // Header Indices Update (NIFTY, BANKNIFTY, SENSEX)
+        // support both formats: response.data or direct array
+        const liveList = response.data || (Array.isArray(response) ? response : null);
+        
+        if (liveList && Array.isArray(liveList)) {
+          // 1. Update Top Header Indices
           setIndices(prevIndices => prevIndices.map(ind => {
-            const found = liveList.find(item => item.symbol === ind.name);
-            if (found && found.ltp) {
-              return { ...ind, ltp: found.ltp };
+            const found = liveList.find(item => item.symbol === ind.name || item.name === ind.name);
+            if (found && (found.ltp || found.close)) {
+              const ltpVal = found.ltp || found.close;
+              const prevVal = found.prev_close || ind.prevClose;
+              return { ...ind, ltp: ltpVal, prevClose: prevVal };
             }
             return ind;
           }));
 
-          // Home Dashboard Market Data Update
+          // 2. Update Home Dashboard Market Cards
           setMarketData(prevMarket => prevMarket.map(item => {
-            const found = liveList.find(i => i.symbol === item.name);
-            if (found && found.ltp) {
-              const spotLtp = found.ltp;
+            const found = liveList.find(i => i.symbol === item.name || i.name === item.name);
+            if (found && (found.ltp || found.close)) {
+              const spotLtp = found.ltp || found.close;
               const prevClose = found.prev_close || item.prevClose;
               const spotDiff = spotLtp - prevClose;
               const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
@@ -104,6 +106,10 @@ function App() {
             return item;
           }));
 
+          if (response.india_vix) {
+            setIndiaVix(response.india_vix);
+          }
+
           setLastUpdated(new Date().toLocaleTimeString());
         }
       } catch (err) {
@@ -116,7 +122,7 @@ function App() {
     };
 
     ws.onclose = () => {
-      console.log("🔴 WebSocket Disconnected. Retrying...");
+      console.log("🔴 WebSocket Disconnected.");
     };
 
     return () => {

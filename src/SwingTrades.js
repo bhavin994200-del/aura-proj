@@ -26,14 +26,14 @@ export default function SwingTradesModule({ marketData = [] }) {
     }
   }, [marketData]);
 
-  // 🔥 બેકેન્ડના સાચા રાઉટ /scan-static-pivot થી ડેટા લાવવા માટેનું ફંક્શન
+  // 🔥 ફિક્સ કરેલું સ્કેન ફંક્શન જે POST રિક્વેસ્ટ દ્વારા ડેટા લાવશે
   const handleScanLiveMarket = async () => {
     setIsScanning(true);
     try {
       const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: fullFnoList.slice(0, 35) })
+        body: JSON.stringify({ symbols: fullFnoList })
       });
       const json = await res.json();
       const data = json.data || [];
@@ -42,10 +42,23 @@ export default function SwingTradesModule({ marketData = [] }) {
         localStorage.setItem('master_cached_market_data', JSON.stringify(data));
         alert('🚀 Swing setups successfully scanned from live market!');
       } else {
-        alert('No data received from server.');
+        const cachedHome = localStorage.getItem('vedicedge_home_market');
+        if (cachedHome) {
+          const parsed = JSON.parse(cachedHome);
+          setLiveMarketStocks(parsed);
+          alert('🚀 Loaded from local market cache!');
+        } else {
+          alert('No data received from server.');
+        }
       }
     } catch (err) {
-      alert('Error connecting to backend server for scanning!');
+      const cachedHome = localStorage.getItem('vedicedge_home_market');
+      if (cachedHome) {
+        setLiveMarketStocks(JSON.parse(cachedHome));
+        alert('🚀 Loaded from local market cache!');
+      } else {
+        alert('Error connecting to backend server for scanning!');
+      }
     }
     setIsScanning(false);
   };

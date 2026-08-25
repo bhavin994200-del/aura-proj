@@ -6,33 +6,38 @@ export default function SwingTradesModule({ marketData = [] }) {
   const [selectedStock, setSelectedStock] = useState('');
   const [tradeType, setTradeType] = useState('BUY');
   const [liveMarketStocks, setLiveMarketStocks] = useState(marketData);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
-  // 🔥 સ્ટેટિક સ્કેનર કે હોમ ડેશબોર્ડમાંથી કેચ્ડ ડેટા પકડી લેવા માટે
+  // 🔥 પેજ ખુલે કે તરત જ બેકેન્ડમાંથી આખા લિસ્ટનો ડેટા ખેંચી લાવશે
   useEffect(() => {
-    if (marketData && marketData.length > 0) {
-      setLiveMarketStocks(marketData);
-    } else {
-      const cachedMaster = localStorage.getItem('master_cached_market_data');
-      const cachedHome = localStorage.getItem('vedicedge_home_market');
-      if (cachedMaster) {
-        try {
-          setLiveMarketStocks(JSON.parse(cachedMaster));
-        } catch (e) {
-          console.log(e);
-        }
-      } else if (cachedHome) {
-        try {
-          setLiveMarketStocks(JSON.parse(cachedHome));
-        } catch (e) {
-          console.log(e);
-        }
+    fetchAllStocksData();
+  }, []);
+
+  const fetchAllStocksData = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols: fullFnoList }) // આખું 225+ સ્ટોક્સનું લિસ્ટ મોકલશે
+      });
+      const json = await res.json();
+      if (json.data && json.data.length > 0) {
+        setLiveMarketStocks(json.data);
+      } else if (marketData && marketData.length > 0) {
+        setLiveMarketStocks(marketData);
+      }
+    } catch (err) {
+      if (marketData && marketData.length > 0) {
+        setLiveMarketStocks(marketData);
       }
     }
-  }, [marketData]);
+    setIsLoading(false);
+  };
 
-  // 🔥 1. Weekly Buy Setups (સ્ટેટિક સ્કેનરના વીકલી સપોર્ટ અને ગાન લેવલ મુજબ)
+  // 🔥 1. Weekly Buy Setups (બધા જ સ્ટોક્સમાંથી)
   const weeklyBuyStocks = liveMarketStocks
     .filter(item => {
       const close = item.weekly?.close || item.ltp;
@@ -51,7 +56,7 @@ export default function SwingTradesModule({ marketData = [] }) {
       desc: 'Static Scanner Weekly Buy Setup'
     }));
 
-  // 🔥 2. Weekly Sell Setups (સ્ટેટિક સ્કેનરના વીકલી રેઝિસ્ટન્સ મુજબ)
+  // 🔥 2. Weekly Sell Setups
   const weeklySellStocks = liveMarketStocks
     .filter(item => {
       const close = item.weekly?.close || item.ltp;
@@ -70,7 +75,7 @@ export default function SwingTradesModule({ marketData = [] }) {
       desc: 'Static Scanner Weekly Sell Setup'
     }));
 
-  // 🔥 3. Monthly Buy Setups (સ્ટેટિક સ્કેનરના મંથલી લેવલ મુજબ)
+  // 🔥 3. Monthly Buy Setups
   const monthlyBuyStocks = liveMarketStocks
     .filter(item => {
       const close = item.monthly?.close || item.weekly?.close || item.ltp;
@@ -89,7 +94,7 @@ export default function SwingTradesModule({ marketData = [] }) {
       desc: 'Static Scanner Monthly Buy Setup'
     }));
 
-  // 🔥 4. Monthly Sell Setups (સ્ટેટિક સ્કેનરના મંથલી લેવલ મુજબ)
+  // 🔥 4. Monthly Sell Setups
   const monthlySellStocks = liveMarketStocks
     .filter(item => {
       const close = item.monthly?.close || item.weekly?.close || item.ltp;
@@ -201,11 +206,21 @@ export default function SwingTradesModule({ marketData = [] }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Real Swing Trades Setup (Static Scanner Based)</h2>
-          <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>સ્ટેટિક સ્કેનરના વીકલી અને મંથલી ડેટા આધારિત સેટઅપ્સ</p>
+          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Real Swing Trades Setup (All F&O Scanned)</h2>
+          <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>
+            {isLoading ? 'Scanning all stocks from server...' : `Total Loaded: ${liveMarketStocks.length} Stocks`}
+          </p>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button 
+            onClick={fetchAllStocksData}
+            disabled={isLoading}
+            style={{ padding: '8px 12px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
+          >
+            {isLoading ? 'Scanning...' : '⚡ Scan All'}
+          </button>
+
           <button 
             onClick={handleCopyForSocial}
             style={{ padding: '8px 12px', backgroundColor: '#059669', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
@@ -297,7 +312,7 @@ function TableView({ data, title, onSelect }) {
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups found. Run Static Scanner first to cache data!</td>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups found. Click "Scan All" above!</td>
               </tr>
             ) : (
               data.map((item, idx) => (

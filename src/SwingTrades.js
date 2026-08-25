@@ -9,14 +9,22 @@ export default function SwingTradesModule({ marketData = [] }) {
 
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
+  // 🔥 સ્ટેટિક સ્કેનર કે હોમ ડેશબોર્ડમાંથી કેચ્ડ ડેટા પકડી લેવા માટે
   useEffect(() => {
     if (marketData && marketData.length > 0) {
       setLiveMarketStocks(marketData);
     } else {
-      const cached = localStorage.getItem('vedicedge_home_market');
-      if (cached) {
+      const cachedMaster = localStorage.getItem('master_cached_market_data');
+      const cachedHome = localStorage.getItem('vedicedge_home_market');
+      if (cachedMaster) {
         try {
-          setLiveMarketStocks(JSON.parse(cached));
+          setLiveMarketStocks(JSON.parse(cachedMaster));
+        } catch (e) {
+          console.log(e);
+        }
+      } else if (cachedHome) {
+        try {
+          setLiveMarketStocks(JSON.parse(cachedHome));
         } catch (e) {
           console.log(e);
         }
@@ -24,7 +32,7 @@ export default function SwingTradesModule({ marketData = [] }) {
     }
   }, [marketData]);
 
-  // 🔥 1. Weekly Buy Setups
+  // 🔥 1. Weekly Buy Setups (સ્ટેટિક સ્કેનરના વીકલી સપોર્ટ અને ગાન લેવલ મુજબ)
   const weeklyBuyStocks = liveMarketStocks
     .filter(item => {
       const close = item.weekly?.close || item.ltp;
@@ -36,14 +44,14 @@ export default function SwingTradesModule({ marketData = [] }) {
       ltp: item.ltp,
       type: 'BUY',
       sl: Number((item.weekly?.support || item.ltp * 0.98).toFixed(1)),
-      slDesc: '90° Weekly Support SL',
+      slDesc: 'Weekly Support SL',
       target: Number((item.weekly?.gann?.up?.g180 || item.ltp * 1.05).toFixed(1)),
-      targetDesc: '180° Up Target',
+      targetDesc: 'Weekly 180° Up Target',
       rr: '1 : 4.0',
-      desc: 'Weekly Gann Support Setup'
+      desc: 'Static Scanner Weekly Buy Setup'
     }));
 
-  // 🔥 2. Weekly Sell (Short) Setups
+  // 🔥 2. Weekly Sell Setups (સ્ટેટિક સ્કેનરના વીકલી રેઝિસ્ટન્સ મુજબ)
   const weeklySellStocks = liveMarketStocks
     .filter(item => {
       const close = item.weekly?.close || item.ltp;
@@ -55,14 +63,14 @@ export default function SwingTradesModule({ marketData = [] }) {
       ltp: item.ltp,
       type: 'SHORT',
       sl: Number((item.weekly?.resistance || item.ltp * 1.02).toFixed(1)),
-      slDesc: '180° Weekly Resistance SL',
+      slDesc: 'Weekly Resistance SL',
       target: Number((item.weekly?.gann?.down?.g180 || item.ltp * 0.95).toFixed(1)),
-      targetDesc: '180° Down Target',
+      targetDesc: 'Weekly 180° Down Target',
       rr: '1 : 4.0',
-      desc: 'Weekly Gann Resistance Setup'
+      desc: 'Static Scanner Weekly Sell Setup'
     }));
 
-  // 🔥 3. Monthly Buy Setups
+  // 🔥 3. Monthly Buy Setups (સ્ટેટિક સ્કેનરના મંથલી લેવલ મુજબ)
   const monthlyBuyStocks = liveMarketStocks
     .filter(item => {
       const close = item.monthly?.close || item.weekly?.close || item.ltp;
@@ -74,14 +82,14 @@ export default function SwingTradesModule({ marketData = [] }) {
       ltp: item.ltp,
       type: 'BUY',
       sl: Number((item.monthly?.support || item.ltp * 0.97).toFixed(1)),
-      slDesc: '90° Monthly Support SL',
+      slDesc: 'Monthly Support SL',
       target: Number((item.monthly?.gann?.up?.g180 || item.ltp * 1.08).toFixed(1)),
-      targetDesc: '180° Up Target',
+      targetDesc: 'Monthly 180° Up Target',
       rr: '1 : 4.5',
-      desc: 'Monthly Gann Support Setup'
+      desc: 'Static Scanner Monthly Buy Setup'
     }));
 
-  // 🔥 4. Monthly Sell (Short) Setups
+  // 🔥 4. Monthly Sell Setups (સ્ટેટિક સ્કેનરના મંથલી લેવલ મુજબ)
   const monthlySellStocks = liveMarketStocks
     .filter(item => {
       const close = item.monthly?.close || item.weekly?.close || item.ltp;
@@ -93,11 +101,11 @@ export default function SwingTradesModule({ marketData = [] }) {
       ltp: item.ltp,
       type: 'SHORT',
       sl: Number((item.monthly?.resistance || item.ltp * 1.03).toFixed(1)),
-      slDesc: '180° Monthly Resistance SL',
+      slDesc: 'Monthly Resistance SL',
       target: Number((item.monthly?.gann?.down?.g180 || item.ltp * 0.92).toFixed(1)),
-      targetDesc: '180° Down Target',
+      targetDesc: 'Monthly 180° Down Target',
       rr: '1 : 4.5',
-      desc: 'Monthly Gann Resistance Setup'
+      desc: 'Static Scanner Monthly Sell Setup'
     }));
 
   const weeklyBuySetups = [...weeklyBuyStocks, ...customAddedSetups.filter(i => i.type === 'BUY' && i.duration === 'weekly')];
@@ -193,8 +201,8 @@ export default function SwingTradesModule({ marketData = [] }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Real Swing Trades Setup (Degree-Wise)</h2>
-          <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>વીકલી અને મંથલી સ્કેનર ડેટા આધારિત Buy અને Sell સેટઅપ્સ</p>
+          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Real Swing Trades Setup (Static Scanner Based)</h2>
+          <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>સ્ટેટિક સ્કેનરના વીકલી અને મંથલી ડેટા આધારિત સેટઅપ્સ</p>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -289,7 +297,7 @@ function TableView({ data, title, onSelect }) {
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups found in this category.</td>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups found. Run Static Scanner first to cache data!</td>
               </tr>
             ) : (
               data.map((item, idx) => (

@@ -196,25 +196,51 @@ function StaticPivotScanner() {
     }
 
     return matchesSearch && matchesBias && matchesDeg && matchesSwg && matchesActionable;
+  }).sort((a, b) => {
+    // જો Weekly Swing કે Monthly Swing બટન સિલેક્ટ હોય, તો સપોર્ટ કે રેઝિસ્ટન્સની સૌથી નજીક હોય તેવા સ્ટોક્સ ટોપ પર આવશે
+    if (staticSubTab === 'weekly_swing' || staticSubTab === 'monthly_swing') {
+      const sub = staticSubTab === 'weekly_swing' ? 'weekly' : 'monthly';
+      const d-a = a[sub] || {};
+      const d-b = b[sub] || {};
+      const s-a = d-a.support || getSafeValues(d-a.close).support;
+      const s-b = d-b.support || getSafeValues(d-b.close).support;
+      const distA = Math.abs(a.ltp - s-a) / s-a;
+      const distB = Math.abs(b.ltp - s-b) / s-b;
+      return distA - distB;
+    }
+    return 0;
   });
 
   const copyAllList = (type) => {
-    let dateStr = type === 'weekly' ? weeklyDate : monthlyDate;
-    let text = type === 'weekly' ? `📅 Weekly Report (Ref Date: ${dateStr})\n\n` : `🗓️ Monthly Report (Ref Date: ${dateStr})\n\n`;
+    let dateStr = type === 'weekly' || type === 'weekly_swing' ? weeklyDate : monthlyDate;
+    let text = `Report (Ref Date: ${dateStr})\n\n`;
     
     filteredData.forEach(item => {
-      let d = item[staticSubTab] || {};
+      const activeTabKey = type === 'weekly_swing' ? 'weekly' : type === 'monthly_swing' ? 'monthly' : type;
+      let d = item[activeTabKey] || {};
       if (d) {
         const safe = getSafeValues(d.close);
         const supportVal = d.support || safe.support;
         const resistanceVal = d.resistance || safe.resistance;
         const up = d.gann?.up || {};
         const closeFormatted = Number(d.close || 0).toFixed(2);
-        text += `Stock: ${item.symbol} | Close: ₹${closeFormatted} | LTP: ₹${item.ltp}\n🟢 Support: ₹${supportVal} | 🔴 Resistance: ₹${resistanceVal}\n📈 Up 45°: ₹${up.g45} | 90°: ₹${up.g90}\n-----------------------------------\n`;
+        text += `Stock: ${item.symbol} | Close: ₹${closeFormatted} | LTP: ₹${item.ltp}\n🟢 Support: ₹${supportVal} | 🔴 Resistance: ₹${resistanceVal}\n-----------------------------------\n`;
       }
     });
     navigator.clipboard.writeText(text);
     alert(`📋 લિસ્ટ કૉપી થઈ ગયું છે!`);
+  };
+
+  // ટેબ સ્વિચ કરતી વખતે ડેટા હેન્ડલ કરવા માટે
+  const handleTabChange = (tab) => {
+    setStaticSubTab(tab);
+    if (tab === 'weekly_swing') {
+      setStaticSubTab('weekly');
+      setSwingFilter('nearSupport');
+    } else if (tab === 'monthly_swing') {
+      setStaticSubTab('monthly');
+      setSwingFilter('nearSupport');
+    }
   };
 
   return (
@@ -227,10 +253,14 @@ function StaticPivotScanner() {
         </div>
       </div>
 
+      {/* નવા Weekly Swing અને Monthly Swing બટનો સાથે */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={() => setStaticSubTab('weekly')} style={{ padding: '8px 16px', background: staticSubTab === 'weekly' ? '#166534' : '#e2e8f0', color: staticSubTab === 'weekly' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>📅 Weekly Fixed Levels</button>
         <button onClick={() => setStaticSubTab('monthly')} style={{ padding: '8px 16px', background: staticSubTab === 'monthly' ? '#166534' : '#e2e8f0', color: staticSubTab === 'monthly' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🗓️ Monthly Fixed Levels</button>
         
+        <button onClick={() => { setStaticSubTab('weekly'); setSwingFilter('nearSupport'); }} style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⚡ Weekly Swing</button>
+        <button onClick={() => { setStaticSubTab('monthly'); setSwingFilter('nearSupport'); }} style={{ padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⚡ Monthly Swing</button>
+
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button onClick={() => copyAllList(staticSubTab)} style={{ padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>📋 Copy Filtered List</button>
           <button onClick={() => fetchStaticData(true)} disabled={loading} style={{ padding: '8px 16px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
@@ -283,7 +313,7 @@ function StaticPivotScanner() {
       <div style={{ background: staticSubTab === 'weekly' ? '#f0fdf4' : '#fef2f2', padding: '15px', borderRadius: '12px', border: `1px solid ${staticSubTab === 'weekly' ? '#bbf7d0' : '#fecaca'}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
           <h3 style={{ color: staticSubTab === 'weekly' ? '#166534' : '#991b1b', margin: 0 }}>
-            📅 {staticSubTab === 'weekly' ? 'Weekly' : 'Monthly'} Fixed Levels
+            📅 {staticSubTab === 'weekly' ? 'Weekly' : 'Monthly'} Fixed Levels & Swings
           </h3>
           <span style={{ background: staticSubTab === 'weekly' ? '#dcfce7' : '#fee2e2', color: staticSubTab === 'weekly' ? '#166534' : '#991b1b', padding: '4px 10px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px' }}>
             Ref Date: {staticSubTab === 'weekly' ? weeklyDate : monthlyDate} | Total: {filteredData.length}
@@ -364,7 +394,7 @@ function StaticPivotScanner() {
                     <td style={{ padding: '10px', textAlign: 'center', verticalAlign: 'middle' }}>
                       <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
                         <button onClick={() => {
-                          const text = `📅 Setup: ${item.symbol} (Close: ₹${formattedClose} | LTP: ₹{item.ltp})\n🟢 S: ₹{supportVal} | 🔴 R: ₹{resistanceVal}\n📈 Up 45°: ₹{up.g45} | 90°: ₹{up.g90}`;
+                          const text = `📅 Setup: ${item.symbol} (Close: ₹${formattedClose} | LTP: ₹{item.ltp})\n🟢 S: ₹{supportVal} | 🔴 R: ₹{resistanceVal}\n📈 Up 45°: ₹${up.g45} | 90°: ₹${up.g90}`;
                           navigator.clipboard.writeText(text);
                           alert(`📋 ${item.symbol} કૉપી થઈ ગયું છે!`);
                         }} style={{ padding: '5px 8px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '10px', fontWeight: 'bold' }}>📋 Copy</button>

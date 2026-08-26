@@ -31,7 +31,6 @@ function OpenPrice() {
     return savedLog ? JSON.parse(savedLog) : [];
   });
 
-  // પેજ પહેલીવાર લોડ થયું છે કે નહીં તે ચકાસવા માટેનો રેફ (જેથી લોડ વખતે બધાના એલર્ટ એકસાથે ન વાગે)
   const isInitialMount = useRef(true);
 
   // બીપ સાઉન્ડ વગાડવા માટેનું ફંક્શન (Web Audio API)
@@ -42,7 +41,7 @@ function OpenPrice() {
       const gain = audioCtx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.value = type === 'BUY' ? 880 : 440; // BUY માટે હાઈ પિચ, SELL માટે લો પિચ
+      osc.frequency.value = type === 'BUY' ? 880 : 440; 
       
       gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
@@ -61,7 +60,7 @@ function OpenPrice() {
   const fetchAllOpenPrices = async (isRefresh = false) => {
     const savedDate = localStorage.getItem('vedicedge_openprice_date');
     if (!isRefresh && savedDate === todayKey && marketData.length > 0) {
-      isInitialMount.value = false;
+      isInitialMount.current = false;
       return;
     }
 
@@ -76,9 +75,26 @@ function OpenPrice() {
       const fetchedData = json.data || [];
       const timeStr = new Date().toLocaleTimeString();
 
-      setMarketData(fetchedData);
-      setLastUpdated(timeStr);
+      // જો પહેલેથી લોકલ સ્ટોરેજમાં ડેટા હોય તો ટ્રિગર સ્ટેટ જાળવી રાખો
+      setMarketData(prevList => {
+        if (prevList.length === 0) return fetchedData;
+        return fetchedData.map(newItem => {
+          const oldItem = prevList.find(i => i.symbol === newItem.symbol);
+          if (oldItem && (oldItem.status === 'BUY' || oldItem.status === 'SELL')) {
+            return {
+              ...newItem,
+              status: oldItem.status,
+              statusBg: oldItem.statusBg,
+              statusColor: oldItem.statusColor,
+              statusText: oldItem.statusText,
+              triggeredAt: oldItem.triggeredAt
+            };
+          }
+          return newItem;
+        });
+      });
 
+      setLastUpdated(timeStr);
       localStorage.setItem('vedicedge_openprice_date', todayKey);
       localStorage.setItem('vedicedge_openprice_data', JSON.stringify(fetchedData));
       localStorage.setItem('vedicedge_openprice_time', timeStr);
@@ -92,12 +108,11 @@ function OpenPrice() {
 
   // ફક્ત લાઈવ LTP અને વાસ્તવિક ક્રોસઓવર અપડેટ કરવા માટેનું ફંક્શન
   const updateLiveLtpOnly = async () => {
-    if (marketData.length === 0) return;
     try {
       const res = await fetch('https://aura-proj.onrender.com/scan-open-price', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: marketData.map(i => i.symbol) })
+        body: JSON.stringify({ symbols: fullFnoList })
       });
       const json = await res.json();
       const updatedList = json.data || [];
@@ -106,68 +121,71 @@ function OpenPrice() {
         let newLogs = [...tradeBookLog];
         let hasNewTrigger = false;
         const timeStr = new Date().toLocaleTimeString();
+        const currentTime = Date.now();
 
-        setMarketData(prevList => 
-          prevList.map(oldItem => {
+        setMarketData(prevList => {
+          // જો પહેલીવાર માર્કેટ ડેટા આવ્યો હોય તો પ્રીવિયસ લિસ્ટ તરીકે નવું લિસ્ટ વાપરો
+          const baseList = prevList.length > 0 ? prevList : updatedList;
+
+          return baseList.map(oldItem => {
             const found = updatedList.find(newItem => newItem.symbol === oldItem.symbol);
-            if (found) {
-              const oldStatus = oldItem.status; 
-              const newStatus = found.status;
+            if (!found) return oldItem;
 
-              // જો અગાઉ RANGE હતું અને હવે વાસ્તવમાં BUY કે SELL થયું, તો જ નવો ટ્રીગર ગણવો
-              if (!isInitialMount.current && oldStatus === 'RANGE' && (newStatus === 'BUY' || newStatus === 'SELL')) {
-                playBeepSound(newStatus);
-                hasNewTrigger = true;
-                
-                const triggerPriceVal = newStatus === 'BUY' ? found.buyLvl : found.sellLvl;
+            const oldStatus = oldItem.status; 
+            const newStatus = found.status;
 
-                // ડુપ્લીકેટ એન્ટ્રી ન પડે તેની ખાતરી કરવા માટે ચેક કરો
-                const alreadyExists = newLogs.some(log => log.symbol === found.symbol && log.action === newStatus);
-                if (!alreadyExists) {
-                  newLogs.unshift({
-                    time: timeStr,
-                    symbol: found.symbol,
-                    action: newStatus,
-                    triggerPrice: triggerPriceVal,
-                    entryLtp: found.ltp
-                  });
-                }
+            // જો અગાઉ RANGE હતું અને હવે વાસ્તવમાં BUY કે SELL થયું, તો જ નવો ટ્રીગર ગણવો
+            if (!isInitialMount.current && oldStatus === 'RANGE' && (newStatus === 'BUY' || newStatus === 'SELL')) {
+              playBeepSound(newStatus);
+              hasNewTrigger = true;
+              
+              const triggerPriceVal = newStatus === 'BUY' ? found.buyLvl : found.sellLvl;
 
-                return {
-                  ...oldItem,
-                  ltp: found.ltp,
-                  status: newStatus,
-                  statusBg: found.statusBg,
-                  statusColor: found.statusColor,
-                  statusText: found.statusText,
-                  triggeredAt: Date.now() // નવું ટ્રીગર થવાનો સમય
-                };
+              // ડુપ્લીકેટ એન્ટ્રી ન પડે તેની ખાતરી કરવા માટે ચેક કરો
+              const alreadyExists = newLogs.some(log => log.symbol === found.symbol);
+              if (!alreadyExists) {
+                newLogs.unshift({
+                  time: timeStr,
+                  symbol: found.symbol,
+                  action: newStatus,
+                  triggerPrice: triggerPriceVal,
+                  entryLtp: found.ltp,
+                  timestamp: currentTime
+                });
               }
 
-              // જો પહેલેથી BUY કે SELL થઈ ગયેલું હોય, તો સ્ટેટ બદલાવું ન જોઈએ (Lock રહેવું જોઈએ)
-              if (oldStatus === 'BUY' || oldStatus === 'SELL') {
-                return {
-                  ...oldItem,
-                  ltp: found.ltp // માત્ર લાઈવ LTP જ ફરશે
-                };
-              }
-
-              // બાકીના કેસમાં સામાન્ય અપડેટ
               return {
                 ...oldItem,
                 ltp: found.ltp,
-                status: found.status,
+                status: newStatus,
                 statusBg: found.statusBg,
                 statusColor: found.statusColor,
-                statusText: found.statusText
+                statusText: found.statusText,
+                triggeredAt: currentTime
               };
             }
-            return oldItem;
-          })
-        );
+
+            // જો પહેલેથી BUY કે SELL થઈ ગયેલું હોય, તો સ્ટેટ બદલાવું ન જોઈએ (Lock રહેવું જોઈએ)
+            if (oldStatus === 'BUY' || oldStatus === 'SELL') {
+              return {
+                ...oldItem,
+                ltp: found.ltp // માત્ર લાઈવ LTP જ ફરશે
+              };
+            }
+
+            // બાકીના કેસમાં સામાન્ય અપડેટ
+            return {
+              ...oldItem,
+              ltp: found.ltp,
+              status: found.status,
+              statusBg: found.statusBg,
+              statusColor: found.statusColor,
+              statusText: found.statusText
+            };
+          });
+        });
 
         if (hasNewTrigger) {
-          // 30 ની લિમિટ કાયમ માટે કાઢી નાખી છે, હવે જેટલા આવે એટલા બધા સેવ થશે
           setTradeBookLog(newLogs);
           localStorage.setItem('vedicedge_openprice_tradebook', JSON.stringify(newLogs));
         }
@@ -234,7 +252,7 @@ function OpenPrice() {
         </div>
       </div>
 
-      {/* OpenPrice ટેબની અંદર જ બનેલી Live Trigger Book Section (અનલિમિટેડ લિમિટ સાથે) */}
+      {/* OpenPrice ટેબની અંદર જ બનેલી Live Trigger Book Section */}
       <div style={{ marginBottom: '20px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h4 style={{ margin: 0, color: '#1e293b', fontSize: '14px' }}>📖 OpenPrice Live Trigger Book ({tradeBookLog.length})</h4>
@@ -360,10 +378,9 @@ function OpenPrice() {
                   badgeColor = '#991b1b';
                 }
 
-                // TradingView Chart URL Generator
                 const tvSymbol = item.symbol === 'NIFTY' ? 'NSE:NIFTY' : 
-                                 item.symbol === 'BANKNIFTY' ? 'NSE:BANKNIFTY' : 
-                                 item.symbol === 'SENSEX' ? 'BSE:SENSEX' : `NSE:${item.symbol}`;
+                                   item.symbol === 'BANKNIFTY' ? 'NSE:BANKNIFTY' : 
+                                   item.symbol === 'SENSEX' ? 'BSE:SENSEX' : `NSE:${item.symbol}`;
                 const tvUrl = `https://in.tradingview.com/chart/?symbol=${tvSymbol}`;
 
                 return (
@@ -376,21 +393,18 @@ function OpenPrice() {
                         {badgeText}
                       </span>
                     </td>
-                    {/* Buy Trigger & 4 Targets */}
                     <td style={{ padding: '12px', fontSize: '11px' }}>
                       <div style={{ color: '#166534', fontWeight: 'bold', marginBottom: '2px' }}>Trigger: ₹{item.buyLvl}</div>
                       <div style={{ color: '#15803d' }}>
                         T1: <b>{item.buyTargets?.[0]}</b> | T2: <b>{item.buyTargets?.[1]}</b> | T3: <b>{item.buyTargets?.[2]}</b> | T4: <b>{item.buyTargets?.[3]}</b>
                       </div>
                     </td>
-                    {/* Sell Trigger & 4 Targets */}
                     <td style={{ padding: '12px', fontSize: '11px' }}>
                       <div style={{ color: '#991b1b', fontWeight: 'bold', marginBottom: '2px' }}>Trigger: ₹{item.sellLvl}</div>
                       <div style={{ color: '#b91c1c' }}>
                         T1: <b>{item.sellTargets?.[0]}</b> | T2: <b>{item.sellTargets?.[1]}</b> | T3: <b>{item.sellTargets?.[2]}</b> | T4: <b>{item.sellTargets?.[3]}</b>
                       </div>
                     </td>
-                    {/* TradingView Chart Button */}
                     <td style={{ padding: '12px', textAlign: 'center' }}>
                       <a 
                         href={tvUrl} 

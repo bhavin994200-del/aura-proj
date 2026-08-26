@@ -6,18 +6,31 @@ export default function SwingTradesModule() {
   const [selectedStock, setSelectedStock] = useState('');
   const [tradeType, setTradeType] = useState('BUY');
   const [liveMarketStocks, setLiveMarketStocks] = useState(() => {
-    // 🔥 Static Scanner ના કેશ્ડ માસ્ટર ડેટામાંથી સીધો જ ડેટા લોડ કરશે
     const cachedMaster = localStorage.getItem('master_cached_market_data');
+    const cachedOpen = localStorage.getItem('vedicedge_openprice_data');
+    const cachedSwing = localStorage.getItem('aura_swing_cache_data');
+
     if (cachedMaster) {
       try {
         const parsed = JSON.parse(cachedMaster);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        console.log("Cache parse error");
-      }
+      } catch (e) {}
+    }
+    if (cachedOpen) {
+      try {
+        const parsed = JSON.parse(cachedOpen);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    if (cachedSwing) {
+      try {
+        const parsed = JSON.parse(cachedSwing);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
     }
     return [];
   });
+  
   const [isLoading, setIsLoading] = useState(false);
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
@@ -42,7 +55,6 @@ export default function SwingTradesModule() {
     }
 
     try {
-      // જો કેશ ખાલી હોય તો મુખ્ય સ્ટોક્સનું લિસ્ટ સ્કેન કરશે
       const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,19 +83,18 @@ export default function SwingTradesModule() {
     }
   };
 
-  // 🔥 1. Weekly Buy Setups (Static Scanner લેવલ્સ સાથે)
+  // 🔥 1. Weekly Buy Logic: LTP >= Support and within 4% above support
   const weeklyBuyStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
       const support = item.weekly?.support;
-      return support && ltp >= support && ltp <= (support * 1.05);
+      return support && ltp >= support && ltp <= (support * 1.04);
     })
     .map(item => {
       const ltp = item.ltp;
-      const supportVal = item.weekly?.support || ltp * 0.98;
-      const resistanceVal = item.weekly?.resistance || ltp * 1.05;
-      const sl = Number((supportVal * 0.99).toFixed(1));
-      const target = Number((item.weekly?.gann?.up?.g360 || resistanceVal).toFixed(1));
+      const supportVal = item.weekly.support;
+      const sl = Number((supportVal * 0.985).toFixed(1));
+      const target = Number((item.weekly?.gann?.up?.g360 || ltp * 1.08).toFixed(1));
       const statusInfo = getTradeStatus(ltp, target, sl, 'BUY');
 
       return {
@@ -91,30 +102,29 @@ export default function SwingTradesModule() {
         ltp: ltp,
         type: 'BUY',
         sl: sl,
-        slDesc: 'Weekly Support',
+        slDesc: 'Weekly Support SL',
         target: target,
-        targetDesc: 'Weekly Resistance / 360°',
+        targetDesc: 'Weekly 360° Target',
         support: supportVal,
-        resistance: resistanceVal,
-        rr: '1 : 5.0',
+        resistance: item.weekly?.resistance || ltp * 1.05,
+        rr: '1 : 4.5',
         status: statusInfo
       };
     })
     .sort((a, b) => a.ltp - b.ltp);
 
-  // 🔥 2. Weekly Sell Setups
+  // 🔥 2. Weekly Sell Logic: LTP <= Resistance and within 4% below resistance
   const weeklySellStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
       const resistance = item.weekly?.resistance;
-      return resistance && ltp <= resistance && ltp >= (resistance * 0.95);
+      return resistance && ltp <= resistance && ltp >= (resistance * 0.96);
     })
     .map(item => {
       const ltp = item.ltp;
-      const supportVal = item.weekly?.support || ltp * 0.95;
-      const resistanceVal = item.weekly?.resistance || ltp * 1.02;
-      const sl = Number((resistanceVal * 1.01).toFixed(1));
-      const target = Number((item.weekly?.gann?.down?.g360 || supportVal).toFixed(1));
+      const resistanceVal = item.weekly.resistance;
+      const sl = Number((resistanceVal * 1.015).toFixed(1));
+      const target = Number((item.weekly?.gann?.down?.g360 || ltp * 0.92).toFixed(1));
       const statusInfo = getTradeStatus(ltp, target, sl, 'SHORT');
 
       return {
@@ -122,30 +132,29 @@ export default function SwingTradesModule() {
         ltp: ltp,
         type: 'SHORT',
         sl: sl,
-        slDesc: 'Weekly Resistance',
+        slDesc: 'Weekly Resistance SL',
         target: target,
-        targetDesc: 'Weekly Support / 360°',
-        support: supportVal,
+        targetDesc: 'Weekly Down Target',
+        support: item.weekly?.support || ltp * 0.95,
         resistance: resistanceVal,
-        rr: '1 : 5.0',
+        rr: '1 : 4.5',
         status: statusInfo
       };
     })
     .sort((a, b) => b.ltp - a.ltp);
 
-  // 🔥 3. Monthly Buy Setups
+  // 🔥 3. Monthly Buy Logic: LTP near Monthly Support
   const monthlyBuyStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
       const support = item.monthly?.support || item.weekly?.support;
-      return support && ltp >= support && ltp <= (support * 1.06);
+      return support && ltp >= support && ltp <= (support * 1.05);
     })
     .map(item => {
       const ltp = item.ltp;
       const supportVal = item.monthly?.support || item.weekly?.support;
-      const resistanceVal = item.monthly?.resistance || item.weekly?.resistance;
-      const sl = Number((supportVal * 0.98).toFixed(1));
-      const target = Number((item.monthly?.gann?.up?.g360 || resistanceVal * 1.05).toFixed(1));
+      const sl = Number((supportVal * 0.975).toFixed(1));
+      const target = Number((item.monthly?.gann?.up?.g360 || ltp * 1.15).toFixed(1));
       const statusInfo = getTradeStatus(ltp, target, sl, 'BUY');
 
       return {
@@ -153,30 +162,29 @@ export default function SwingTradesModule() {
         ltp: ltp,
         type: 'BUY',
         sl: sl,
-        slDesc: 'Monthly Support',
+        slDesc: 'Monthly Support SL',
         target: target,
-        targetDesc: 'Monthly Resistance',
+        targetDesc: 'Monthly Mega Target',
         support: supportVal,
-        resistance: resistanceVal,
+        resistance: item.monthly?.resistance || ltp * 1.10,
         rr: '1 : 6.0',
         status: statusInfo
       };
     })
     .sort((a, b) => a.ltp - b.ltp);
 
-  // 🔥 4. Monthly Sell Setups
+  // 🔥 4. Monthly Sell Logic: LTP near Monthly Resistance
   const monthlySellStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
       const resistance = item.monthly?.resistance || item.weekly?.resistance;
-      return resistance && ltp <= resistance && ltp >= (resistance * 0.94);
+      return resistance && ltp <= resistance && ltp >= (resistance * 0.95);
     })
     .map(item => {
       const ltp = item.ltp;
-      const supportVal = item.monthly?.support || item.weekly?.support;
       const resistanceVal = item.monthly?.resistance || item.weekly?.resistance;
-      const sl = Number((resistanceVal * 1.02).toFixed(1));
-      const target = Number((item.monthly?.gann?.down?.g360 || supportVal * 0.95).toFixed(1));
+      const sl = Number((resistanceVal * 1.025).toFixed(1));
+      const target = Number((item.monthly?.gann?.down?.g360 || ltp * 0.85).toFixed(1));
       const statusInfo = getTradeStatus(ltp, target, sl, 'SHORT');
 
       return {
@@ -184,10 +192,10 @@ export default function SwingTradesModule() {
         ltp: ltp,
         type: 'SHORT',
         sl: sl,
-        slDesc: 'Monthly Resistance',
+        slDesc: 'Monthly Resistance SL',
         target: target,
-        targetDesc: 'Monthly Support',
-        support: supportVal,
+        targetDesc: 'Monthly Down Target',
+        support: item.monthly?.support || ltp * 0.90,
         resistance: resistanceVal,
         rr: '1 : 6.0',
         status: statusInfo
@@ -247,14 +255,14 @@ export default function SwingTradesModule() {
 
       setCustomAddedSetups([newItem, ...customAddedSetups]);
       setSelectedStock('');
-      alert(`Custom setup added for ${cleanSymbol}!`);
+      alert(`Setup added for ${cleanSymbol}!`);
     } catch (err) {
       alert("Error fetching stock data!");
     }
   };
 
   const handleCopyForSocial = () => {
-    let text = `🚀 *AURA TERMINAL - STATIC SWING TRADES* 🚀\n`;
+    let text = `🚀 *AURA TERMINAL - SWING SETUPS* 🚀\n`;
     text = text + `Mode: ${subTab.toUpperCase()}\n`;
     text = text + `-----------------------------------\n\n`;
 
@@ -289,9 +297,9 @@ export default function SwingTradesModule() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Static Scanner Based Swing Trades</h2>
+          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Professional Swing Trades (Weekly & Monthly)</h2>
           <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>
-            {isLoading ? 'Loading scanner cache...' : `Loaded Database: ${liveMarketStocks.length} Stocks from Scanner`}
+            {isLoading ? 'Loading cache...' : `Loaded Database: ${liveMarketStocks.length} Stocks`}
           </p>
         </div>
 
@@ -301,7 +309,7 @@ export default function SwingTradesModule() {
             disabled={isLoading}
             style={{ padding: '8px 12px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            {isLoading ? 'Loading...' : '⚡ Reload Scanner Data'}
+            {isLoading ? 'Loading...' : '⚡ Reload Data'}
           </button>
 
           <button 
@@ -338,7 +346,6 @@ export default function SwingTradesModule() {
         </div>
       </div>
 
-      {/* Manual Add Form */}
       <form onSubmit={handleAddCustomSwing} style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: '#f4f4f5', padding: '15px', borderRadius: '10px', border: '1px solid #d4d4d8', alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: '2', minWidth: '200px' }}>
           <input 
@@ -397,7 +404,7 @@ function TableView({ data, title, onSelect }) {
             {data.length === 0 ? (
               <tr>
                 <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>
-                  No setups found. Please visit "Static Scanner" tab once to load scanner cache!
+                  No setups found. Please visit "Static Scanner" tab once to load cache!
                 </td>
               </tr>
             ) : (
@@ -429,7 +436,7 @@ function TableView({ data, title, onSelect }) {
                   </td>
                   <td style={{ padding: '14px 20px', color: '#27272a', fontWeight: 'bold' }}>₹{item.ltp}</td>
                   <td style={{ padding: '14px 20px', color: '#16a34a', fontWeight: '600' }}>₹{Number(item.support).toFixed(1)}</td>
-                  <td style={{ padding: '14px 20px', color: '#dc2626', fontWeight: '600' }}>₹{Number(item.resistance).toFixed(1))}</td>
+                  <td style={{ padding: '14px 20px', color: '#dc2626', fontWeight: '600' }}>₹{Number(item.resistance).toFixed(1)}</td>
                   <td style={{ padding: '14px 20px', fontSize: '12px' }}>
                     <div style={{ color: '#b91c1c' }}>SL: ₹{item.sl}</div>
                     <div style={{ color: '#15803d' }}>Tgt: ₹{item.target}</div>

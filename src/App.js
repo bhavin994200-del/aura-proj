@@ -5,7 +5,7 @@ import StaticPivotScanner from './StaticPivotScanner';
 import CalculatorModule from './Calculator';
 import SwingTradesModule from './SwingTrades';
 import OpenPrice from './OpenPrice';
-import SuperSwingModule from './SuperSwing'; // ⭐ નવું સુપર સ્વિંગ મોડ્યુલ ઇમ્પોર્ટ કર્યું
+import SuperSwingModule from './SuperSwing';
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -56,7 +56,6 @@ function App() {
     return sum;
   }
 
-  // 🔥 આખી એપ (Aura) માં ગ્લોબલ લાઈવ ડેટા અને LTP અપડેટ રાખવા માટેની સ્માર્ટ પૉલિંગ સિસ્ટમ
   useEffect(() => {
     const fetchGlobalLiveData = async () => {
       try {
@@ -122,9 +121,9 @@ function App() {
   return (
     <div style={{ display: 'flex', height: '100vh', backgroundColor: '#e4e4e7', color: '#27272a', fontFamily: 'sans-serif' }}>
       
-      {/* Sidebar */}
-      <div style={{ width: '260px', backgroundColor: '#d4d4d8', borderRight: '1px solid #a1a1aa', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '20px', borderBottom: '1px solid #a1a1aa' }}>
+      {/* Sidebar - Fix added with overflowY: 'auto' */}
+      <div style={{ width: '260px', backgroundColor: '#d4d4d8', borderRight: '1px solid #a1a1aa', display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        <div style={{ padding: '20px', borderBottom: '1px solid #a1a1aa', flexShrink: 0 }}>
           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#18181b' }}>
             ⚡ Aura Terminal
           </div>
@@ -133,11 +132,11 @@ function App() {
           </div>
         </div>
 
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', flex: 1 }}>
           <button onClick={() => setActiveTab('home')} style={btnStyle(activeTab === 'home')}>Home Dashboard</button>
           <button onClick={() => setActiveTab('openPrice')} style={btnStyle(activeTab === 'openPrice')}>🚀 OpenPrice</button>
           <button onClick={() => setActiveTab('swingTrades')} style={btnStyle(activeTab === 'swingTrades')}>🚀 Swing Trades</button>
-          <button onClick={() => setActiveTab('superSwing')} style={btnStyle(activeTab === 'superSwing')}>⭐ Super Swing</button> {/* ⭐ નવું બટન ઉમેર્યું */}
+          <button onClick={() => setActiveTab('superSwing')} style={btnStyle(activeTab === 'superSwing')}>⭐ Super Swing</button>
           <button onClick={() => setActiveTab('scanner')} style={btnStyle(activeTab === 'scanner')}>Static Scanner</button>
           <button onClick={() => setActiveTab('biasCalendar')} style={btnStyle(activeTab === 'biasCalendar')}>Bias Calendar</button>
           <button onClick={() => setActiveTab('calculator')} style={btnStyle(activeTab === 'calculator')}>Calculator</button>
@@ -146,10 +145,10 @@ function App() {
       </div>
 
       {/* Main Workspace Area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
         
         {/* Top Header */}
-        <div style={{ height: '70px', backgroundColor: '#d4d4d8', borderBottom: '1px solid #a1a1aa', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px' }}>
+        <div style={{ height: '70px', backgroundColor: '#d4d4d8', borderBottom: '1px solid #a1a1aa', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', flexShrink: 0 }}>
           <div style={{ fontSize: '15px', fontWeight: '500', color: '#52525b' }}>
             Welcome back, <span style={{ color: '#18181b', fontWeight: 'bold' }}>Bhavin</span> ✨
           </div>
@@ -184,7 +183,7 @@ function App() {
           {activeTab === 'home' && <HomeDashboard marketData={marketData} setMarketData={setMarketData} />}
           {activeTab === 'openPrice' && <OpenPrice />}
           {activeTab === 'swingTrades' && <SwingTradesModule />}
-          {activeTab === 'superSwing' && <SuperSwingModule />} {/* ⭐ નવું મોડ્યુલ અહીં રેન્ડર થશે */}
+          {activeTab === 'superSwing' && <SuperSwingModule />}
           {activeTab === 'scanner' && <StaticPivotScanner />}
           {activeTab === 'biasCalendar' && <BiasCalendar />}
           {activeTab === 'calculator' && <CalculatorModule />}
@@ -595,7 +594,8 @@ const btnStyle = (active) => ({
   borderRadius: '8px',
   cursor: 'pointer',
   fontWeight: 'bold',
-  transition: '0.2s'
+  transition: '0.2s',
+  flexShrink: 0
 });
 
 const inputStyle = {

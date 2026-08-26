@@ -1,47 +1,45 @@
 import React, { useState, useEffect } from 'react';
+import { fullFnoList } from './watchlistData';
 
-export default function SwingTradesModule({ marketData = [] }) {
+export default function SwingTradesModule() {
   const [subTab, setSubTab] = useState('weekly_buy');
   const [selectedStock, setSelectedStock] = useState('');
   const [tradeType, setTradeType] = useState('BUY');
-  const [liveMarketStocks, setLiveMarketStocks] = useState(marketData);
+  const [liveMarketStocks, setLiveMarketStocks] = useState(() => {
+    const cached = localStorage.getItem('aura_swing_cache_data');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.log("Cache parse error");
+      }
+    }
+    return [];
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
-  // 🔥 ફિક્સ: માત્ર સ્ટેટિક સ્કેનરના બેકેન્ડ ડેટા કે કેશમાંથી જ ડેટા લેશે (વોચલિસ્ટ પૂરું ગાયબ)
   useEffect(() => {
-    const cachedMaster = localStorage.getItem('master_cached_market_data');
-    if (marketData && marketData.length > 0) {
-      setLiveMarketStocks(marketData);
-    } else if (cachedMaster) {
-      try {
-        setLiveMarketStocks(JSON.parse(cachedMaster));
-      } catch (e) {
-        fetchAllStaticData();
-      }
-    } else {
-      fetchAllStaticData();
-    }
-  }, [marketData]);
+    fetchAllStaticData();
+  }, []);
 
   const fetchAllStaticData = async () => {
     setIsLoading(true);
     try {
-      // 225+ F&O સ્ટોક્સનું આખું લિસ્ટ સ્ટેટિક સ્કેનરમાંથી ફેચ કરવા માટે
-      const defaultList = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "BHARTIARTL", "ITC", "KOTAKBANK", "LT", "AXISBANK", "BAJFINANCE", "ASIANPAINT", "MARUTI", "HCLTECH", "TITAN", "SUNPHARMA", "ADANIENT", "ULTRACEMCO", "NTPC"];
-      
+      // 🔥 આખું 225+ F&O લિસ્ટ બેકએન્ડમાં સ્કેનિંગ માટે મોકલશે
       const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: defaultList })
+        body: JSON.stringify({ symbols: fullFnoList })
       });
       const json = await res.json();
       if (json.data && json.data.length > 0) {
         setLiveMarketStocks(json.data);
-        localStorage.setItem('master_cached_market_data', JSON.stringify(json.data));
+        localStorage.setItem('aura_swing_cache_data', JSON.stringify(json.data));
       }
     } catch (err) {
-      console.error("Error fetching static data:", err);
+      console.error("Error scanning static pivot for swing trades:", err);
     }
     setIsLoading(false);
   };
@@ -58,7 +56,7 @@ export default function SwingTradesModule({ marketData = [] }) {
     }
   };
 
-  // 🔥 1. Weekly Buy (પ્યોર સ્ટેટિક વીકલી સપોર્ટ બેઝ્ડ)
+  // 🔥 1. Weekly Buy Setups
   const weeklyBuyStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
@@ -86,7 +84,7 @@ export default function SwingTradesModule({ marketData = [] }) {
       };
     });
 
-  // 🔥 2. Weekly Sell (પ્યોર સ્ટેટિક વીકલી રેઝિસ્ટન્સ બેઝ્ડ)
+  // 🔥 2. Weekly Sell Setups
   const weeklySellStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
@@ -114,7 +112,7 @@ export default function SwingTradesModule({ marketData = [] }) {
       };
     });
 
-  // 🔥 3. Monthly Buy (પ્યોર સ્ટેટિક મંથલી સપોર્ટ બેઝ્ડ)
+  // 🔥 3. Monthly Buy Setups
   const monthlyBuyStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
@@ -143,7 +141,7 @@ export default function SwingTradesModule({ marketData = [] }) {
       };
     });
 
-  // 🔥 4. Monthly Sell (પ્યોર સ્ટેટિક મંથલી રેઝિસ્ટન્સ બેઝ્ડ)
+  // 🔥 4. Monthly Sell Setups
   const monthlySellStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
@@ -231,7 +229,7 @@ export default function SwingTradesModule({ marketData = [] }) {
   };
 
   const handleCopyForSocial = () => {
-    let text = `🚀 *AURA TERMINAL - STATIC SWING TRADES* 🚀\n`;
+    let text = `🚀 *AURA TERMINAL - FULL F&O SWING TRADES* 🚀\n`;
     text = text + `Mode: ${subTab.toUpperCase()}\n`;
     text = text + `-----------------------------------\n\n`;
 
@@ -267,9 +265,9 @@ export default function SwingTradesModule({ marketData = [] }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Static Pivot Scanned Swing Trades</h2>
+          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Full F&O Scanned Swing Trades</h2>
           <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>
-            {isLoading ? 'Scanning static levels...' : `Loaded Scanner Database: ${liveMarketStocks.length} Stocks`}
+            {isLoading ? 'Scanning all 225+ F&O stocks...' : `Loaded Scanner Database: ${liveMarketStocks.length} Stocks`}
           </p>
         </div>
 
@@ -279,7 +277,7 @@ export default function SwingTradesModule({ marketData = [] }) {
             disabled={isLoading}
             style={{ padding: '8px 12px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            {isLoading ? 'Scanning...' : '⚡ Scan Static Levels'}
+            {isLoading ? 'Scanning...' : '⚡ Scan All F&O'}
           </button>
 
           <button 
@@ -321,12 +319,18 @@ export default function SwingTradesModule({ marketData = [] }) {
         <div style={{ flex: '2', minWidth: '200px' }}>
           <input 
             type="text" 
-            placeholder="Type stock symbol..." 
+            list="swing-fno-list"
+            placeholder="Select or type stock from F&O..." 
             value={selectedStock} 
             onChange={(e) => setSelectedStock(e.target.value)} 
             style={{ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #a1a1aa', background: 'white', boxSizing: 'border-box' }} 
             required 
           />
+          <datalist id="swing-fno-list">
+            {fullFnoList.map((item, idx) => (
+              <option key={idx} value={item} />
+            ))}
+          </datalist>
         </div>
 
         <select value={tradeType} onChange={(e) => setTradeType(e.target.value)} style={{ padding: '9px', borderRadius: '6px', border: '1px solid #a1a1aa', background: 'white', fontWeight: 'bold' }}>
@@ -368,7 +372,7 @@ function TableView({ data, title, onSelect }) {
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No static pivot setups found. Click "Scan Static Levels" above!</td>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No matching swing setups found. Click "Scan All F&O" above!</td>
               </tr>
             ) : (
               data.map((item, idx) => (
@@ -395,6 +399,11 @@ function TableView({ data, title, onSelect }) {
                       <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', backgroundColor: item.type === 'BUY' ? '#dcfce7' : '#fee2e2', color: item.type === 'BUY' ? '#15803d' : '#b91c1c' }}>
                         {item.type}
                       </span>
+                      {item.isSpike && (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', backgroundColor: '#fef3c7', color: '#d97706', fontWeight: 'bold' }}>
+                          ⚡ Vol Spike
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: '11px', color: '#71717a', fontStyle: 'italic', marginTop: '2px' }}>{item.desc}</div>
                   </td>

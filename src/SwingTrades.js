@@ -6,32 +6,50 @@ export default function SwingTradesModule() {
   const [selectedStock, setSelectedStock] = useState('');
   const [tradeType, setTradeType] = useState('BUY');
   const [liveMarketStocks, setLiveMarketStocks] = useState(() => {
-    const cached = localStorage.getItem('aura_swing_cache_data');
-    if (cached) {
+    // 🔥 સ્ટેટિક સ્કેનર અથવા ઓપન પ્રાઇસના કેશ્ડ ડેટામાંથી સીધો જ આખો ડેટા પકડશે (સર્વર લોડ ફ્રી)
+    const cachedMaster = localStorage.getItem('master_cached_market_data');
+    const cachedOpen = localStorage.getItem('vedicedge_openprice_data');
+    const cachedSwing = localStorage.getItem('aura_swing_cache_data');
+
+    if (cachedMaster) {
       try {
-        const parsed = JSON.parse(cached);
+        const parsed = JSON.parse(cachedMaster);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        console.log("Cache parse error");
-      }
+      } catch (e) {}
+    }
+    if (cachedOpen) {
+      try {
+        const parsed = JSON.parse(cachedOpen);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    if (cachedSwing) {
+      try {
+        const parsed = JSON.parse(cachedSwing);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
     }
     return [];
   });
+  
   const [isLoading, setIsLoading] = useState(false);
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
   useEffect(() => {
-    fetchAllStaticData();
+    // જો કેશ ખાલી હોય તો જ બેકએન્ડને હિટ કરશે
+    if (liveMarketStocks.length === 0) {
+      fetchAllStaticData();
+    }
   }, []);
 
   const fetchAllStaticData = async () => {
     setIsLoading(true);
     try {
-      // 🔥 આખું 225+ F&O લિસ્ટ બેકએન્ડમાં સ્કેનિંગ માટે મોકલશે
+      // સર્વર પર ઓવરલોડ ન થાય તે માટે માત્ર પ્રાઇમરી લિસ્ટ સ્કેન કરશે અથવા કેશ વાપરશે
       const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: fullFnoList })
+        body: JSON.stringify({ symbols: fullFnoList.slice(0, 50) }) // શરુઆતના મુખ્ય સ્ટોક્સ બેચમાં સ્કેન કરશે
       });
       const json = await res.json();
       if (json.data && json.data.length > 0) {
@@ -56,7 +74,7 @@ export default function SwingTradesModule() {
     }
   };
 
-  // 🔥 1. Weekly Buy Setups
+  // 🔥 1. Weekly Buy Setups (LTP પ્રમાણે સોર્ટ કરેલા)
   const weeklyBuyStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
@@ -82,7 +100,8 @@ export default function SwingTradesModule() {
         isSpike: item.volume_spike || false,
         status: statusInfo
       };
-    });
+    })
+    .sort((a, b) => a.ltp - b.ltp);
 
   // 🔥 2. Weekly Sell Setups
   const weeklySellStocks = liveMarketStocks
@@ -110,7 +129,8 @@ export default function SwingTradesModule() {
         isSpike: item.volume_spike || false,
         status: statusInfo
       };
-    });
+    })
+    .sort((a, b) => b.ltp - a.ltp);
 
   // 🔥 3. Monthly Buy Setups
   const monthlyBuyStocks = liveMarketStocks
@@ -139,7 +159,8 @@ export default function SwingTradesModule() {
         isSpike: item.volume_spike || false,
         status: statusInfo
       };
-    });
+    })
+    .sort((a, b) => a.ltp - b.ltp);
 
   // 🔥 4. Monthly Sell Setups
   const monthlySellStocks = liveMarketStocks
@@ -168,7 +189,8 @@ export default function SwingTradesModule() {
         isSpike: item.volume_spike || false,
         status: statusInfo
       };
-    });
+    })
+    .sort((a, b) => b.ltp - a.ltp);
 
   const weeklyBuySetups = [...weeklyBuyStocks, ...customAddedSetups.filter(i => i.type === 'BUY' && i.duration === 'weekly')];
   const weeklySellSetups = [...weeklySellStocks, ...customAddedSetups.filter(i => i.type === 'SHORT' && i.duration === 'weekly')];
@@ -229,7 +251,7 @@ export default function SwingTradesModule() {
   };
 
   const handleCopyForSocial = () => {
-    let text = `🚀 *AURA TERMINAL - FULL F&O SWING TRADES* 🚀\n`;
+    let text = `🚀 *AURA TERMINAL - CACHED SWING TRADES* 🚀\n`;
     text = text + `Mode: ${subTab.toUpperCase()}\n`;
     text = text + `-----------------------------------\n\n`;
 
@@ -265,9 +287,9 @@ export default function SwingTradesModule() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Full F&O Scanned Swing Trades</h2>
+          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Cached Swing Trades (LTP Sorted)</h2>
           <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>
-            {isLoading ? 'Scanning all 225+ F&O stocks...' : `Loaded Scanner Database: ${liveMarketStocks.length} Stocks`}
+            {isLoading ? 'Loading from cache...' : `Loaded Database: ${liveMarketStocks.length} Stocks`}
           </p>
         </div>
 
@@ -277,7 +299,7 @@ export default function SwingTradesModule() {
             disabled={isLoading}
             style={{ padding: '8px 12px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            {isLoading ? 'Scanning...' : '⚡ Scan All F&O'}
+            {isLoading ? 'Scanning...' : '⚡ Force Refresh'}
           </button>
 
           <button 
@@ -372,7 +394,7 @@ function TableView({ data, title, onSelect }) {
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No matching swing setups found. Click "Scan All F&O" above!</td>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No cached swing setups found. Open Static Scanner tab once to cache data!</td>
               </tr>
             ) : (
               data.map((item, idx) => (

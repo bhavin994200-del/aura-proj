@@ -55,31 +55,36 @@ function App() {
     return sum;
   }
 
-  // 🔥 સ્મૂથ અને એરર-ફ્રી 5 સેકન્ડ પોલિંગ (કોઈ WebSocket હેન્ડશાઇક ટાઇમઆઉટ પ્રોબ્લેમ નહીં)
+  // 🔥 આખી એપ (Aura) માં ગ્લોબલ લાઈવ ડેટા અને LTP અપડેટ રાખવા માટેની સ્માર્ટ પૉલિંગ સિસ્ટમ
   useEffect(() => {
-    const fetchLiveData = async () => {
+    const fetchGlobalLiveData = async () => {
       try {
+        // આખું F&O લિસ્ટ અથવા હોમ ડેશબોર્ડના સિમ્બોલ્સ બેકએન્ડમાં મોકલીને લાઈવ ડેટા ખેંચી લાવશે
+        const symbolsToFetch = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK'];
         const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ symbols: ['NIFTY', 'BANKNIFTY', 'SENSEX'] })
+          body: JSON.stringify({ symbols: symbolsToFetch })
         });
         const response = await res.json();
         const liveList = response.data || [];
 
         if (liveList.length > 0) {
+          // 🔥 ગ્લોબલ કેશમાં સેવ કરીશું જેથી SwingTrades અને બીજા મોડ્યુલ પણ આ લાઈવ ડેટા વાપરી શકે
+          localStorage.setItem('master_cached_market_data', JSON.stringify(liveList));
+
           setIndices(prevIndices => prevIndices.map(ind => {
-            const found = liveList.find(item => item.symbol === ind.name);
-            if (found && found.ltp) {
-              return { ...ind, ltp: found.ltp };
+            const found = liveList.find(item => item.symbol === ind.name || item.name === ind.name);
+            if (found && (found.ltp || found.close)) {
+              return { ...ind, ltp: found.ltp || found.close };
             }
             return ind;
           }));
 
           setMarketData(prevMarket => prevMarket.map(item => {
-            const found = liveList.find(i => i.symbol === item.name);
-            if (found && found.ltp) {
-              const spotLtp = found.ltp;
+            const found = liveList.find(i => i.symbol === item.name || i.name === item.name);
+            if (found && (found.ltp || found.close)) {
+              const spotLtp = found.ltp || found.close;
               const prevClose = found.prev_close || item.prevClose;
               const spotDiff = spotLtp - prevClose;
               const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
@@ -90,8 +95,8 @@ function App() {
                 spotChange: Math.abs(spotDiff).toFixed(2),
                 spotChangePct: Math.abs(spotPct).toFixed(2),
                 prevClose: prevClose,
-                high: found.weekly?.resistance || item.high,
-                low: found.weekly?.support || item.low
+                high: found.weekly?.resistance || found.high || item.high,
+                low: found.weekly?.support || found.low || item.low
               };
             }
             return item;
@@ -103,12 +108,12 @@ function App() {
           setLastUpdated(new Date().toLocaleTimeString());
         }
       } catch (e) {
-        console.log("Live fetch polling error (Server might be waking up)");
+        console.log("Global live fetch polling error (Server waking up)");
       }
     };
 
-    fetchLiveData(); // પેજ ખુલે એટલે તરત જ ડેટા લાવશે
-    const interval = setInterval(fetchLiveData, 5000); // દર 5 સેકન્ડે ઓટો રિફ્રેશ થશે
+    fetchGlobalLiveData(); // પેજ ખુલે એટલે તરત જ ડેટા ફેચ કરશે
+    const interval = setInterval(fetchGlobalLiveData, 5000); // દર 5 સેકન્ડે આખી એપમાં LTP લાઈવ ફરતા રહેશે
 
     return () => clearInterval(interval);
   }, []);

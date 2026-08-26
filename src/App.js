@@ -5,6 +5,7 @@ import StaticPivotScanner from './StaticPivotScanner';
 import CalculatorModule from './Calculator';
 import SwingTradesModule from './SwingTrades';
 import OpenPrice from './OpenPrice';
+import SuperSwingModule from './SuperSwing'; // ⭐ નવું સુપર સ્વિંગ મોડ્યુલ ઇમ્પોર્ટ કર્યું
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -59,7 +60,6 @@ function App() {
   useEffect(() => {
     const fetchGlobalLiveData = async () => {
       try {
-        // 🔥 હવે માત્ર 8 સ્ટોક્સ નહીં, પણ આખું F&O લિસ્ટ અથવા હોમ ડેશબોર્ડના મુખ્ય સિમ્બોલ્સ મોકલશે
         const homeSymbols = marketData.map(item => item.name);
         const symbolsToFetch = Array.from(new Set(['NIFTY', 'BANKNIFTY', 'SENSEX', ...homeSymbols, ...fullFnoList.slice(0, 40)]));
 
@@ -72,7 +72,6 @@ function App() {
         const liveList = response.data || [];
 
         if (liveList.length > 0) {
-          // 🔥 ગ્લોબલ કેશમાં સેવ કરીશું જેથી SwingTrades અને બીજા મોડ્યુલ પણ આ લાઈવ ડેટા વાપરી શકે
           localStorage.setItem('master_cached_market_data', JSON.stringify(liveList));
 
           setIndices(prevIndices => prevIndices.map(ind => {
@@ -114,8 +113,8 @@ function App() {
       }
     };
 
-    fetchGlobalLiveData(); // પેજ ખુલે એટલે તરત જ ડેટા ફેચ કરશે
-    const interval = setInterval(fetchGlobalLiveData, 5000); // દર 5 સેકન્ડે આખી એપમાં LTP લાઈવ ફરતા રહેશે
+    fetchGlobalLiveData();
+    const interval = setInterval(fetchGlobalLiveData, 5000);
 
     return () => clearInterval(interval);
   }, []);
@@ -134,10 +133,11 @@ function App() {
           </div>
         </div>
 
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
           <button onClick={() => setActiveTab('home')} style={btnStyle(activeTab === 'home')}>Home Dashboard</button>
           <button onClick={() => setActiveTab('openPrice')} style={btnStyle(activeTab === 'openPrice')}>🚀 OpenPrice</button>
           <button onClick={() => setActiveTab('swingTrades')} style={btnStyle(activeTab === 'swingTrades')}>🚀 Swing Trades</button>
+          <button onClick={() => setActiveTab('superSwing')} style={btnStyle(activeTab === 'superSwing')}>⭐ Super Swing</button> {/* ⭐ નવું બટન ઉમેર્યું */}
           <button onClick={() => setActiveTab('scanner')} style={btnStyle(activeTab === 'scanner')}>Static Scanner</button>
           <button onClick={() => setActiveTab('biasCalendar')} style={btnStyle(activeTab === 'biasCalendar')}>Bias Calendar</button>
           <button onClick={() => setActiveTab('calculator')} style={btnStyle(activeTab === 'calculator')}>Calculator</button>
@@ -184,6 +184,7 @@ function App() {
           {activeTab === 'home' && <HomeDashboard marketData={marketData} setMarketData={setMarketData} />}
           {activeTab === 'openPrice' && <OpenPrice />}
           {activeTab === 'swingTrades' && <SwingTradesModule />}
+          {activeTab === 'superSwing' && <SuperSwingModule />} {/* ⭐ નવું મોડ્યુલ અહીં રેન્ડર થશે */}
           {activeTab === 'scanner' && <StaticPivotScanner />}
           {activeTab === 'biasCalendar' && <BiasCalendar />}
           {activeTab === 'calculator' && <CalculatorModule />}

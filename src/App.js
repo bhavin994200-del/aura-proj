@@ -3,9 +3,7 @@ import { fullFnoList } from './watchlistData';
 import BiasCalendar from './BiasCalendar';
 import StaticPivotScanner from './StaticPivotScanner';
 import CalculatorModule from './Calculator';
-import SwingTradesModule from './SwingTrades';
 import OpenPrice from './OpenPrice';
-import SuperSwingModule from './SuperSwing';
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -121,7 +119,7 @@ function App() {
   return (
     <div style={{ display: 'flex', height: '100vh', backgroundColor: '#e4e4e7', color: '#27272a', fontFamily: 'sans-serif' }}>
       
-      {/* Sidebar - Fix added with overflowY: 'auto' */}
+      {/* Sidebar */}
       <div style={{ width: '260px', backgroundColor: '#d4d4d8', borderRight: '1px solid #a1a1aa', display: 'flex', flexDirection: 'column', height: '100vh' }}>
         <div style={{ padding: '20px', borderBottom: '1px solid #a1a1aa', flexShrink: 0 }}>
           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#18181b' }}>
@@ -135,8 +133,6 @@ function App() {
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', flex: 1 }}>
           <button onClick={() => setActiveTab('home')} style={btnStyle(activeTab === 'home')}>Home Dashboard</button>
           <button onClick={() => setActiveTab('openPrice')} style={btnStyle(activeTab === 'openPrice')}>🚀 OpenPrice</button>
-          <button onClick={() => setActiveTab('swingTrades')} style={btnStyle(activeTab === 'swingTrades')}>🚀 Swing Trades</button>
-          <button onClick={() => setActiveTab('superSwing')} style={btnStyle(activeTab === 'superSwing')}>⭐ Super Swing</button>
           <button onClick={() => setActiveTab('scanner')} style={btnStyle(activeTab === 'scanner')}>Static Scanner</button>
           <button onClick={() => setActiveTab('biasCalendar')} style={btnStyle(activeTab === 'biasCalendar')}>Bias Calendar</button>
           <button onClick={() => setActiveTab('calculator')} style={btnStyle(activeTab === 'calculator')}>Calculator</button>
@@ -182,8 +178,6 @@ function App() {
         <div style={{ padding: '30px', flex: 1, overflowY: 'auto', backgroundColor: '#e4e4e7' }}>
           {activeTab === 'home' && <HomeDashboard marketData={marketData} setMarketData={setMarketData} />}
           {activeTab === 'openPrice' && <OpenPrice />}
-          {activeTab === 'swingTrades' && <SwingTradesModule />}
-          {activeTab === 'superSwing' && <SuperSwingModule />}
           {activeTab === 'scanner' && <StaticPivotScanner />}
           {activeTab === 'biasCalendar' && <BiasCalendar />}
           {activeTab === 'calculator' && <CalculatorModule />}

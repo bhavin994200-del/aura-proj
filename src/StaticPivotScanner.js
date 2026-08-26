@@ -10,6 +10,7 @@ function StaticPivotScanner() {
   const [swingFilter, setSwingFilter] = useState('all'); 
   const [actionableFilter, setActionableFilter] = useState('all'); 
   const [watchlist, setWatchlist] = useState([]); 
+  const [activeTab, setActiveTab] = useState('scanner'); 
   const [weeklyDate, setWeeklyDate] = useState('');
   const [monthlyDate, setMonthlyDate] = useState('');
   const [loading, setLoading] = useState(false);
@@ -166,6 +167,14 @@ function StaticPivotScanner() {
   };
 
   const filteredData = staticData.filter(item => {
+    if (activeTab === 'watchlist' && !watchlist.includes(item.symbol)) return false;
+    if (activeTab === 'confluence' && !isConfluenceStock(item)) return false;
+    if (activeTab === 'orbMomentum') {
+      const mom = item.momentum || {};
+      const isOrbBreakout = item.ltp > 0 && mom.orb_high && item.ltp >= mom.orb_high;
+      if (!isOrbBreakout && !mom.is_strong) return false;
+    }
+
     const d = staticSubTab === 'weekly' ? item.weekly : item.monthly;
     if (!d) return false;
     const safe = getSafeValues(d.close);
@@ -197,50 +206,36 @@ function StaticPivotScanner() {
 
     return matchesSearch && matchesBias && matchesDeg && matchesSwg && matchesActionable;
   }).sort((a, b) => {
-    // જો Weekly Swing કે Monthly Swing બટન સિલેક્ટ હોય, તો સપોર્ટ કે રેઝિસ્ટન્સની સૌથી નજીક હોય તેવા સ્ટોક્સ ટોપ પર આવશે
     if (staticSubTab === 'weekly_swing' || staticSubTab === 'monthly_swing') {
       const sub = staticSubTab === 'weekly_swing' ? 'weekly' : 'monthly';
-      const d-a = a[sub] || {};
-      const d-b = b[sub] || {};
-      const s-a = d-a.support || getSafeValues(d-a.close).support;
-      const s-b = d-b.support || getSafeValues(d-b.close).support;
-      const distA = Math.abs(a.ltp - s-a) / s-a;
-      const distB = Math.abs(b.ltp - s-b) / s-b;
+      const da = a[sub] || {};
+      const db = b[sub] || {};
+      const sa = da.support || getSafeValues(da.close).support;
+      const sb = db.support || getSafeValues(db.close).support;
+      const distA = Math.abs(a.ltp - sa) / sa;
+      const distB = Math.abs(b.ltp - sb) / sb;
       return distA - distB;
     }
     return 0;
   });
 
   const copyAllList = (type) => {
-    let dateStr = type === 'weekly' || type === 'weekly_swing' ? weeklyDate : monthlyDate;
-    let text = `Report (Ref Date: ${dateStr})\n\n`;
+    let dateStr = type === 'weekly' ? weeklyDate : monthlyDate;
+    let text = type === 'weekly' ? `📅 Weekly Report (Ref Date: ${dateStr})\n\n` : `🗓️ Monthly Report (Ref Date: ${dateStr})\n\n`;
     
     filteredData.forEach(item => {
-      const activeTabKey = type === 'weekly_swing' ? 'weekly' : type === 'monthly_swing' ? 'monthly' : type;
-      let d = item[activeTabKey] || {};
+      let d = item[staticSubTab] || {};
       if (d) {
         const safe = getSafeValues(d.close);
         const supportVal = d.support || safe.support;
         const resistanceVal = d.resistance || safe.resistance;
         const up = d.gann?.up || {};
         const closeFormatted = Number(d.close || 0).toFixed(2);
-        text += `Stock: ${item.symbol} | Close: ₹${closeFormatted} | LTP: ₹${item.ltp}\n🟢 Support: ₹${supportVal} | 🔴 Resistance: ₹${resistanceVal}\n-----------------------------------\n`;
+        text += `Stock: ${item.symbol} | Close: ₹${closeFormatted} | LTP: ₹${item.ltp}\n🟢 Support: ₹${supportVal} | 🔴 Resistance: ₹${resistanceVal}\n📈 Up 45°: ₹${up.g45} | 90°: ₹${up.g90}\n-----------------------------------\n`;
       }
     });
     navigator.clipboard.writeText(text);
     alert(`📋 લિસ્ટ કૉપી થઈ ગયું છે!`);
-  };
-
-  // ટેબ સ્વિચ કરતી વખતે ડેટા હેન્ડલ કરવા માટે
-  const handleTabChange = (tab) => {
-    setStaticSubTab(tab);
-    if (tab === 'weekly_swing') {
-      setStaticSubTab('weekly');
-      setSwingFilter('nearSupport');
-    } else if (tab === 'monthly_swing') {
-      setStaticSubTab('monthly');
-      setSwingFilter('nearSupport');
-    }
   };
 
   return (
@@ -251,13 +246,19 @@ function StaticPivotScanner() {
           <h2 style={{ margin: 0, color: '#1e293b' }}>📅 Ultimate Pivot & Professional Terminal</h2>
           {lastRefreshTime && <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold' }}>🕒 Last Refreshed At: {lastRefreshTime}</span>}
         </div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button onClick={() => setActiveTab('scanner')} style={{ padding: '8px 12px', background: activeTab === 'scanner' ? '#0284c7' : '#e2e8f0', color: activeTab === 'scanner' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📡 Scanner</button>
+          <button onClick={() => setActiveTab('confluence')} style={{ padding: '8px 12px', background: activeTab === 'confluence' ? '#7c3aed' : '#e2e8f0', color: activeTab === 'confluence' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>🎯 Confluence (2/2)</button>
+          <button onClick={() => setActiveTab('orbMomentum')} style={{ padding: '8px 12px', background: activeTab === 'orbMomentum' ? '#16a34a' : '#e2e8f0', color: activeTab === 'orbMomentum' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>🚀 ORB & Momentum</button>
+          <button onClick={() => setActiveTab('watchlist')} style={{ padding: '8px 12px', background: activeTab === 'watchlist' ? '#d97706' : '#e2e8f0', color: activeTab === 'watchlist' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>⭐ Watchlist ({watchlist.length})</button>
+        </div>
       </div>
 
-      {/* નવા Weekly Swing અને Monthly Swing બટનો સાથે */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={() => setStaticSubTab('weekly')} style={{ padding: '8px 16px', background: staticSubTab === 'weekly' ? '#166534' : '#e2e8f0', color: staticSubTab === 'weekly' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>📅 Weekly Fixed Levels</button>
         <button onClick={() => setStaticSubTab('monthly')} style={{ padding: '8px 16px', background: staticSubTab === 'monthly' ? '#166534' : '#e2e8f0', color: staticSubTab === 'monthly' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🗓️ Monthly Fixed Levels</button>
         
+        {/* Weekly Swing & Monthly Swing બટનો */}
         <button onClick={() => { setStaticSubTab('weekly'); setSwingFilter('nearSupport'); }} style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⚡ Weekly Swing</button>
         <button onClick={() => { setStaticSubTab('monthly'); setSwingFilter('nearSupport'); }} style={{ padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⚡ Monthly Swing</button>
 
@@ -313,7 +314,7 @@ function StaticPivotScanner() {
       <div style={{ background: staticSubTab === 'weekly' ? '#f0fdf4' : '#fef2f2', padding: '15px', borderRadius: '12px', border: `1px solid ${staticSubTab === 'weekly' ? '#bbf7d0' : '#fecaca'}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
           <h3 style={{ color: staticSubTab === 'weekly' ? '#166534' : '#991b1b', margin: 0 }}>
-            📅 {staticSubTab === 'weekly' ? 'Weekly' : 'Monthly'} Fixed Levels & Swings
+            {activeTab === 'confluence' ? '🎯 Confluence Match Stocks (Weekly + Monthly)' : activeTab === 'orbMomentum' ? '🚀 ORB Breakout & Relative Strength Stocks' : activeTab === 'watchlist' ? `⭐ Watchlist Stocks (${staticSubTab})` : `📅 ${staticSubTab === 'weekly' ? 'Weekly' : 'Monthly'} Fixed Levels`}
           </h3>
           <span style={{ background: staticSubTab === 'weekly' ? '#dcfce7' : '#fee2e2', color: staticSubTab === 'weekly' ? '#166534' : '#991b1b', padding: '4px 10px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px' }}>
             Ref Date: {staticSubTab === 'weekly' ? weeklyDate : monthlyDate} | Total: {filteredData.length}
@@ -394,7 +395,7 @@ function StaticPivotScanner() {
                     <td style={{ padding: '10px', textAlign: 'center', verticalAlign: 'middle' }}>
                       <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
                         <button onClick={() => {
-                          const text = `📅 Setup: ${item.symbol} (Close: ₹${formattedClose} | LTP: ₹{item.ltp})\n🟢 S: ₹{supportVal} | 🔴 R: ₹{resistanceVal}\n📈 Up 45°: ₹${up.g45} | 90°: ₹${up.g90}`;
+                          const text = `📅 Setup: ${item.symbol} (Close: ₹${formattedClose} | LTP: ₹{item.ltp})\n🟢 S: ₹{supportVal} | 🔴 R: ₹{resistanceVal}\n📈 Up 45°: ₹{up.g45} | 90°: ₹{up.g90}`;
                           navigator.clipboard.writeText(text);
                           alert(`📋 ${item.symbol} કૉપી થઈ ગયું છે!`);
                         }} style={{ padding: '5px 8px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '10px', fontWeight: 'bold' }}>📋 Copy</button>

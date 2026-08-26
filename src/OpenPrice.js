@@ -31,8 +31,8 @@ function OpenPrice() {
     return savedLog ? JSON.parse(savedLog) : [];
   });
 
-  // પ્રીવિયસ સ્ટેટ ટ્રેક કરવા માટે જેથી વારંવાર અવાજ ન વાગે
-  const previousStatusRef = useRef({});
+  // પેજ પહેલીવાર લોડ થયું છે કે નહીં તે ચકાસવા માટેનો રેફ (જેથી લોડ વખતે બધાના એલર્ટ એકસાથે ન વાગે)
+  const isInitialMount = useRef(true);
 
   // બીપ સાઉન્ડ વગાડવા માટેનું ફંક્શન (Web Audio API)
   const playBeepSound = (type) => {
@@ -60,7 +60,10 @@ function OpenPrice() {
   // આખું નવું સ્કેનિંગ (ક્લાઉડ લાઈવ બેકેન્ડ સાથે)
   const fetchAllOpenPrices = async (isRefresh = false) => {
     const savedDate = localStorage.getItem('vedicedge_openprice_date');
-    if (!isRefresh && savedDate === todayKey && marketData.length > 0) return;
+    if (!isRefresh && savedDate === todayKey && marketData.length > 0) {
+      isInitialMount.value = false;
+      return;
+    }
 
     setLoading(true);
     try {
@@ -73,16 +76,14 @@ function OpenPrice() {
       const fetchedData = json.data || [];
       const timeStr = new Date().toLocaleTimeString();
 
-      fetchedData.forEach(item => {
-        previousStatusRef.current[item.symbol] = item.status;
-      });
-
       setMarketData(fetchedData);
       setLastUpdated(timeStr);
 
       localStorage.setItem('vedicedge_openprice_date', todayKey);
       localStorage.setItem('vedicedge_openprice_data', JSON.stringify(fetchedData));
       localStorage.setItem('vedicedge_openprice_time', timeStr);
+      
+      isInitialMount.current = false;
     } catch (e) {
       console.log("OpenPrice Fetch Error:", e);
     }
@@ -114,21 +115,23 @@ function OpenPrice() {
               const newStatus = found.status;
 
               // જો અગાઉ RANGE હતું અને હવે વાસ્તવમાં BUY કે SELL થયું, તો જ નવો ટ્રીગર ગણવો
-              if (oldStatus === 'RANGE' && (newStatus === 'BUY' || newStatus === 'SELL')) {
+              if (!isInitialMount.current && oldStatus === 'RANGE' && (newStatus === 'BUY' || newStatus === 'SELL')) {
                 playBeepSound(newStatus);
                 hasNewTrigger = true;
                 
                 const triggerPriceVal = newStatus === 'BUY' ? found.buyLvl : found.sellLvl;
 
-                newLogs.unshift({
-                  time: timeStr,
-                  symbol: found.symbol,
-                  action: newStatus,
-                  triggerPrice: triggerPriceVal,
-                  entryLtp: found.ltp
-                });
-
-                previousStatusRef.current[found.symbol] = newStatus;
+                // ડુપ્લીકેટ એન્ટ્રી ન પડે તેની ખાતરી કરવા માટે ચેક કરો
+                const alreadyExists = newLogs.some(log => log.symbol === found.symbol && log.action === newStatus);
+                if (!alreadyExists) {
+                  newLogs.unshift({
+                    time: timeStr,
+                    symbol: found.symbol,
+                    action: newStatus,
+                    triggerPrice: triggerPriceVal,
+                    entryLtp: found.ltp
+                  });
+                }
 
                 return {
                   ...oldItem,
@@ -137,7 +140,7 @@ function OpenPrice() {
                   statusBg: found.statusBg,
                   statusColor: found.statusColor,
                   statusText: found.statusText,
-                  triggeredAt: Date.now() // નવું ટ્રીગર થવાનો સમય નોંધવા માટે જેથી લિસ્ટમાં ક્રમ જળવાઈ રહે
+                  triggeredAt: Date.now() // નવું ટ્રીગર થવાનો સમય
                 };
               }
 
@@ -145,7 +148,7 @@ function OpenPrice() {
               if (oldStatus === 'BUY' || oldStatus === 'SELL') {
                 return {
                   ...oldItem,
-                  ltp: found.ltp // માત્ર લાઈવ LTP જ ફરશે, સ્ટેટ નહીં બદલાય
+                  ltp: found.ltp // માત્ર લાઈવ LTP જ ફરશે
                 };
               }
 
@@ -164,14 +167,15 @@ function OpenPrice() {
         );
 
         if (hasNewTrigger) {
-          const limitedLogs = newLogs.slice(0, 30); // મહત્તમ 30 રેકોર્ડ્સ સેવ રહેશે
-          setTradeBookLog(limitedLogs);
-          localStorage.setItem('vedicedge_openprice_tradebook', JSON.stringify(limitedLogs));
+          // 30 ની લિમિટ કાયમ માટે કાઢી નાખી છે, હવે જેટલા આવે એટલા બધા સેવ થશે
+          setTradeBookLog(newLogs);
+          localStorage.setItem('vedicedge_openprice_tradebook', JSON.stringify(newLogs));
         }
 
         setLastUpdated(timeStr);
+        isInitialMount.current = false;
       }
-    }catch (err) {
+    } catch (err) {
       console.log("Live LTP update error");
     }
   };
@@ -183,7 +187,7 @@ function OpenPrice() {
     return () => clearInterval(interval);
   }, []);
 
-  // સોર્ટિંગ લૉજિક: ABCD કાઢી નાખ્યું છે. જે સૌથી પહેલા BUY કે SELL થશે તે સૌથી ઉપર આવશે, પછી નવા આવતા જશે.
+  // સોર્ટિંગ લૉજિક: જે સૌથી પહેલા BUY કે SELL થશે તે સૌથી ઉપર આવશે, પછી નવા આવતા જશે.
   const filteredList = marketData
     .filter(item => {
       const matchesSearch = item.symbol.toLowerCase().includes(searchTerm.toLowerCase());
@@ -201,10 +205,9 @@ function OpenPrice() {
       const pB = getPriority(b.status);
 
       if (pA !== pB) {
-        return pA - pB; // BUY અથવા SELL પેલા ઉપર આવશે, પછી RANGE
+        return pA - pB; 
       }
 
-      // જો બંનેનું સ્ટેટ સરખું હોય (દા.ત. બંને BUY હોય), તો જે નવું ટ્રીગર આવ્યું હોય તે ઉપર આવશે
       return (b.triggeredAt || 0) - (a.triggeredAt || 0);
     });
 
@@ -231,7 +234,7 @@ function OpenPrice() {
         </div>
       </div>
 
-      {/* OpenPrice ટેબની અંદર જ બનેલી Live Trigger Book Section */}
+      {/* OpenPrice ટેબની અંદર જ બનેલી Live Trigger Book Section (અનલિમિટેડ લિમિટ સાથે) */}
       <div style={{ marginBottom: '20px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h4 style={{ margin: 0, color: '#1e293b', fontSize: '14px' }}>📖 OpenPrice Live Trigger Book ({tradeBookLog.length})</h4>
@@ -245,10 +248,10 @@ function OpenPrice() {
           )}
         </div>
 
-        <div style={{ maxHeight: '130px', overflowY: 'auto' }}>
+        <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
           {tradeBookLog.length === 0 ? (
             <div style={{ fontSize: '12px', color: '#64748b', textAlign: 'center', padding: '10px' }}>
-              જ્યારે કોઈ સ્ટોક BUY કે SELL લેવલ ક્રોસ કરશે, ત્યારે તેની એન્ટ્રી અહીં ઓટોમેટિક નોંધાશે.
+              જ્યારે કોઈ સ્ટોક LIVE માર્કેટમાં BUY કે SELL લેવલ ક્રોસ કરશે, ત્યારે તેની એન્ટ્રી અહીં અનલિમિટેડ નોંધાશે.
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>

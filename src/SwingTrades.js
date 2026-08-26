@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { fullFnoList } from './watchlistData';
 
 export default function SwingTradesModule({ marketData = [] }) {
   const [subTab, setSubTab] = useState('weekly_buy');
@@ -7,31 +6,42 @@ export default function SwingTradesModule({ marketData = [] }) {
   const [tradeType, setTradeType] = useState('BUY');
   const [liveMarketStocks, setLiveMarketStocks] = useState(marketData);
   const [isLoading, setIsLoading] = useState(false);
-
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
+  // 🔥 ફિક્સ: માત્ર સ્ટેટિક સ્કેનરના બેકેન્ડ ડેટા કે કેશમાંથી જ ડેટા લેશે (વોચલિસ્ટ પૂરું ગાયબ)
   useEffect(() => {
-    fetchAllStocksData();
-  }, []);
+    const cachedMaster = localStorage.getItem('master_cached_market_data');
+    if (marketData && marketData.length > 0) {
+      setLiveMarketStocks(marketData);
+    } else if (cachedMaster) {
+      try {
+        setLiveMarketStocks(JSON.parse(cachedMaster));
+      } catch (e) {
+        fetchAllStaticData();
+      }
+    } else {
+      fetchAllStaticData();
+    }
+  }, [marketData]);
 
-  const fetchAllStocksData = async () => {
+  const fetchAllStaticData = async () => {
     setIsLoading(true);
     try {
+      // 225+ F&O સ્ટોક્સનું આખું લિસ્ટ સ્ટેટિક સ્કેનરમાંથી ફેચ કરવા માટે
+      const defaultList = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "BHARTIARTL", "ITC", "KOTAKBANK", "LT", "AXISBANK", "BAJFINANCE", "ASIANPAINT", "MARUTI", "HCLTECH", "TITAN", "SUNPHARMA", "ADANIENT", "ULTRACEMCO", "NTPC"];
+      
       const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: fullFnoList })
+        body: JSON.stringify({ symbols: defaultList })
       });
       const json = await res.json();
       if (json.data && json.data.length > 0) {
         setLiveMarketStocks(json.data);
-      } else if (marketData && marketData.length > 0) {
-        setLiveMarketStocks(marketData);
+        localStorage.setItem('master_cached_market_data', JSON.stringify(json.data));
       }
     } catch (err) {
-      if (marketData && marketData.length > 0) {
-        setLiveMarketStocks(marketData);
-      }
+      console.error("Error fetching static data:", err);
     }
     setIsLoading(false);
   };
@@ -48,12 +58,12 @@ export default function SwingTradesModule({ marketData = [] }) {
     }
   };
 
-  // 🔥 1. PURE Weekly Buy: અસલી વીકલી સપોર્ટની ઉપર કે આસપાસ બાઉન્સ થતા સ્ટોક્સ
+  // 🔥 1. Weekly Buy (પ્યોર સ્ટેટિક વીકલી સપોર્ટ બેઝ્ડ)
   const weeklyBuyStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
       const support = item.weekly?.support;
-      return support && ltp >= support && ltp <= (support * 1.03); // સપોર્ટથી મહત્તમ 3% ની અંદર હોય
+      return support && ltp >= support && ltp <= (support * 1.04);
     })
     .map(item => {
       const ltp = item.ltp;
@@ -70,18 +80,18 @@ export default function SwingTradesModule({ marketData = [] }) {
         target: target,
         targetDesc: 'Weekly 360° Mega Target',
         rr: '1 : 5.5',
-        desc: 'Pure Weekly Support Bounce Setup',
+        desc: 'Static Weekly Support Setup',
         isSpike: item.volume_spike || false,
         status: statusInfo
       };
     });
 
-  // 🔥 2. PURE Weekly Sell: અસલી વીકલી રેઝિસ્ટન્સ પર રિજેક્ટ થતા સ્ટોક્સ
+  // 🔥 2. Weekly Sell (પ્યોર સ્ટેટિક વીકલી રેઝિસ્ટન્સ બેઝ્ડ)
   const weeklySellStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
       const resistance = item.weekly?.resistance;
-      return resistance && ltp <= resistance && ltp >= (resistance * 0.97); // રેઝિસ્ટન્સથી 3% ની અંદર હોય
+      return resistance && ltp <= resistance && ltp >= (resistance * 0.96);
     })
     .map(item => {
       const ltp = item.ltp;
@@ -98,22 +108,23 @@ export default function SwingTradesModule({ marketData = [] }) {
         target: target,
         targetDesc: 'Weekly 360° Down Target',
         rr: '1 : 5.5',
-        desc: 'Pure Weekly Resistance Setup',
+        desc: 'Static Weekly Resistance Setup',
         isSpike: item.volume_spike || false,
         status: statusInfo
       };
     });
 
-  // 🔥 3. PURE Monthly Buy: અસલી મંથલી સપોર્ટ ઝોન વાળા સ્ટોક્સ
+  // 🔥 3. Monthly Buy (પ્યોર સ્ટેટિક મંથલી સપોર્ટ બેઝ્ડ)
   const monthlyBuyStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
       const support = item.monthly?.support || item.weekly?.support;
-      return support && ltp >= support && ltp <= (support * 1.04);
+      return support && ltp >= support && ltp <= (support * 1.05);
     })
     .map(item => {
       const ltp = item.ltp;
-      const sl = Number((support * 0.98).toFixed(1));
+      const supportVal = item.monthly?.support || item.weekly?.support;
+      const sl = Number((supportVal * 0.98).toFixed(1));
       const target = Number((item.monthly?.gann?.up?.g360 || ltp * 1.12).toFixed(1));
       const statusInfo = getTradeStatus(ltp, target, sl, 'BUY');
 
@@ -126,22 +137,23 @@ export default function SwingTradesModule({ marketData = [] }) {
         target: target,
         targetDesc: 'Monthly 360° Mega Target',
         rr: '1 : 7.0',
-        desc: 'Pure Monthly Support Setup',
+        desc: 'Static Monthly Support Setup',
         isSpike: item.volume_spike || false,
         status: statusInfo
       };
     });
 
-  // 🔥 4. PURE Monthly Sell: અસલી મંથલી રેઝિસ્ટન્સ ઝોન વાળા સ્ટોક્સ
+  // 🔥 4. Monthly Sell (પ્યોર સ્ટેટિક મંથલી રેઝિસ્ટન્સ બેઝ્ડ)
   const monthlySellStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
       const resistance = item.monthly?.resistance || item.weekly?.resistance;
-      return resistance && ltp <= resistance && ltp >= (resistance * 0.96);
+      return resistance && ltp <= resistance && ltp >= (resistance * 0.95);
     })
     .map(item => {
       const ltp = item.ltp;
-      const sl = Number((resistance * 1.02).toFixed(1));
+      const resVal = item.monthly?.resistance || item.weekly?.resistance;
+      const sl = Number((resVal * 1.02).toFixed(1));
       const target = Number((item.monthly?.gann?.down?.g360 || ltp * 0.88).toFixed(1));
       const statusInfo = getTradeStatus(ltp, target, sl, 'SHORT');
 
@@ -154,7 +166,7 @@ export default function SwingTradesModule({ marketData = [] }) {
         target: target,
         targetDesc: 'Monthly 360° Down Target',
         rr: '1 : 7.0',
-        desc: 'Pure Monthly Resistance Setup',
+        desc: 'Static Monthly Resistance Setup',
         isSpike: item.volume_spike || false,
         status: statusInfo
       };
@@ -219,7 +231,7 @@ export default function SwingTradesModule({ marketData = [] }) {
   };
 
   const handleCopyForSocial = () => {
-    let text = `🚀 *AURA TERMINAL - PURE SWING TRADES* 🚀\n`;
+    let text = `🚀 *AURA TERMINAL - STATIC SWING TRADES* 🚀\n`;
     text = text + `Mode: ${subTab.toUpperCase()}\n`;
     text = text + `-----------------------------------\n\n`;
 
@@ -255,19 +267,19 @@ export default function SwingTradesModule({ marketData = [] }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Pure Swing Trades (Support/Resistance Filtered)</h2>
+          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Static Pivot Scanned Swing Trades</h2>
           <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>
-            {isLoading ? 'Scanning all stocks from server...' : `Total Loaded: ${liveMarketStocks.length} Stocks`}
+            {isLoading ? 'Scanning static levels...' : `Loaded Scanner Database: ${liveMarketStocks.length} Stocks`}
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button 
-            onClick={fetchAllStocksData}
+            onClick={fetchAllStaticData}
             disabled={isLoading}
             style={{ padding: '8px 12px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            {isLoading ? 'Scanning...' : '⚡ Scan All'}
+            {isLoading ? 'Scanning...' : '⚡ Scan Static Levels'}
           </button>
 
           <button 
@@ -309,18 +321,12 @@ export default function SwingTradesModule({ marketData = [] }) {
         <div style={{ flex: '2', minWidth: '200px' }}>
           <input 
             type="text" 
-            list="swing-fno-list"
-            placeholder="Select or type stock from F&O..." 
+            placeholder="Type stock symbol..." 
             value={selectedStock} 
             onChange={(e) => setSelectedStock(e.target.value)} 
             style={{ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #a1a1aa', background: 'white', boxSizing: 'border-box' }} 
             required 
           />
-          <datalist id="swing-fno-list">
-            {fullFnoList.map((item, idx) => (
-              <option key={idx} value={item} />
-            ))}
-          </datalist>
         </div>
 
         <select value={tradeType} onChange={(e) => setTradeType(e.target.value)} style={{ padding: '9px', borderRadius: '6px', border: '1px solid #a1a1aa', background: 'white', fontWeight: 'bold' }}>
@@ -343,7 +349,7 @@ function TableView({ data, title, onSelect }) {
     <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #d4d4d8', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
       <div style={{ backgroundColor: '#f4f4f5', padding: '15px 20px', borderBottom: '1px solid #d4d4d8', fontWeight: 'bold', color: '#18181b', fontSize: '16px', display: 'flex', justifyContent: 'space-between' }}>
         <span>{title}</span>
-        <span style={{ fontSize: '13px', color: '#52525b', fontWeight: 'normal' }}>{data.length} Active Setups</span>
+        <span style={{ fontSize: '13px', color: '#52525b', fontWeight: 'normal' }}>{data.length} Filtered Setups</span>
       </div>
 
       <div style={{ maxHeight: '550px', overflowY: 'auto' }}>
@@ -362,7 +368,7 @@ function TableView({ data, title, onSelect }) {
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No pure setups found matching support/resistance criteria right now.</td>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No static pivot setups found. Click "Scan Static Levels" above!</td>
               </tr>
             ) : (
               data.map((item, idx) => (
@@ -389,11 +395,6 @@ function TableView({ data, title, onSelect }) {
                       <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', backgroundColor: item.type === 'BUY' ? '#dcfce7' : '#fee2e2', color: item.type === 'BUY' ? '#15803d' : '#b91c1c' }}>
                         {item.type}
                       </span>
-                      {item.isSpike && (
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', backgroundColor: '#fef3c7', color: '#d97706', fontWeight: 'bold' }}>
-                          ⚡ Vol Spike
-                        </span>
-                      )}
                     </div>
                     <div style={{ fontSize: '11px', color: '#71717a', fontStyle: 'italic', marginTop: '2px' }}>{item.desc}</div>
                   </td>

@@ -10,7 +10,6 @@ export default function SwingTradesModule({ marketData = [] }) {
 
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
-  // 🔥 પેજ ખુલે કે તરત જ બેકેન્ડમાંથી આખા લિસ્ટનો ડેટા ખેંચી લાવશે
   useEffect(() => {
     fetchAllStocksData();
   }, []);
@@ -21,7 +20,7 @@ export default function SwingTradesModule({ marketData = [] }) {
       const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: fullFnoList }) // આખું 225+ સ્ટોક્સનું લિસ્ટ મોકલશે
+        body: JSON.stringify({ symbols: fullFnoList })
       });
       const json = await res.json();
       if (json.data && json.data.length > 0) {
@@ -37,81 +36,129 @@ export default function SwingTradesModule({ marketData = [] }) {
     setIsLoading(false);
   };
 
-  // 🔥 1. Weekly Buy Setups (બલેન્સ્ડ ફિલ્ટર લૉજિક સાથે)
+  const getTradeStatus = (ltp, target, sl, type) => {
+    if (type === 'BUY') {
+      if (ltp >= target) return { status: '🎯 Target Hit', color: '#15803d', bg: '#dcfce7' };
+      if (ltp <= sl) return { status: '🛑 SL Hit', color: '#b91c1c', bg: '#fee2e2' };
+      return { status: '⚡ Active', color: '#2563eb', bg: '#eff6ff' };
+    } else {
+      if (ltp <= target) return { status: '🎯 Target Hit', color: '#15803d', bg: '#dcfce7' };
+      if (ltp >= sl) return { status: '🛑 SL Hit', color: '#b91c1c', bg: '#fee2e2' };
+      return { status: '⚡ Active', color: '#2563eb', bg: '#eff6ff' };
+    }
+  };
+
+  // 🔥 1. PURE Weekly Buy: અસલી વીકલી સપોર્ટની ઉપર કે આસપાસ બાઉન્સ થતા સ્ટોક્સ
   const weeklyBuyStocks = liveMarketStocks
-    .filter((item, idx) => {
+    .filter(item => {
       const ltp = item.ltp;
-      const support = item.weekly?.support || ltp * 0.98;
-      return ltp >= support || idx % 2 === 0;
+      const support = item.weekly?.support;
+      return support && ltp >= support && ltp <= (support * 1.03); // સપોર્ટથી મહત્તમ 3% ની અંદર હોય
     })
-    .map(item => ({
-      name: item.name || item.symbol,
-      ltp: item.ltp,
-      type: 'BUY',
-      sl: Number((item.weekly?.support || item.ltp * 0.98).toFixed(1)),
-      slDesc: 'Weekly Support SL',
-      target: Number((item.weekly?.gann?.up?.g180 || item.ltp * 1.05).toFixed(1)),
-      targetDesc: 'Weekly 180° Up Target',
-      rr: '1 : 4.0',
-      desc: 'Static Scanner Weekly Buy Setup'
-    }));
+    .map(item => {
+      const ltp = item.ltp;
+      const sl = Number((item.weekly.support * 0.99).toFixed(1));
+      const target = Number((item.weekly?.gann?.up?.g360 || ltp * 1.08).toFixed(1));
+      const statusInfo = getTradeStatus(ltp, target, sl, 'BUY');
 
-  // 🔥 2. Weekly Sell Setups (બલેન્સ્ડ ફિલ્ટર લૉજિક સાથે)
+      return {
+        name: item.name || item.symbol,
+        ltp: ltp,
+        type: 'BUY',
+        sl: sl,
+        slDesc: 'Weekly Support SL',
+        target: target,
+        targetDesc: 'Weekly 360° Mega Target',
+        rr: '1 : 5.5',
+        desc: 'Pure Weekly Support Bounce Setup',
+        isSpike: item.volume_spike || false,
+        status: statusInfo
+      };
+    });
+
+  // 🔥 2. PURE Weekly Sell: અસલી વીકલી રેઝિસ્ટન્સ પર રિજેક્ટ થતા સ્ટોક્સ
   const weeklySellStocks = liveMarketStocks
-    .filter((item, idx) => {
+    .filter(item => {
       const ltp = item.ltp;
-      const resistance = item.weekly?.resistance || ltp * 1.02;
-      return ltp < resistance || idx % 2 !== 0;
+      const resistance = item.weekly?.resistance;
+      return resistance && ltp <= resistance && ltp >= (resistance * 0.97); // રેઝિસ્ટન્સથી 3% ની અંદર હોય
     })
-    .map(item => ({
-      name: item.name || item.symbol,
-      ltp: item.ltp,
-      type: 'SHORT',
-      sl: Number((item.weekly?.resistance || item.ltp * 1.02).toFixed(1)),
-      slDesc: 'Weekly Resistance SL',
-      target: Number((item.weekly?.gann?.down?.g180 || item.ltp * 0.95).toFixed(1)),
-      targetDesc: 'Weekly 180° Down Target',
-      rr: '1 : 4.0',
-      desc: 'Static Scanner Weekly Sell Setup'
-    }));
+    .map(item => {
+      const ltp = item.ltp;
+      const sl = Number((item.weekly.resistance * 1.01).toFixed(1));
+      const target = Number((item.weekly?.gann?.down?.g360 || ltp * 0.92).toFixed(1));
+      const statusInfo = getTradeStatus(ltp, target, sl, 'SHORT');
 
-  // 🔥 3. Monthly Buy Setups (બલેન્સ્ડ ફિલ્ટર લૉજિક સાથે)
+      return {
+        name: item.name || item.symbol,
+        ltp: ltp,
+        type: 'SHORT',
+        sl: sl,
+        slDesc: 'Weekly Resistance SL',
+        target: target,
+        targetDesc: 'Weekly 360° Down Target',
+        rr: '1 : 5.5',
+        desc: 'Pure Weekly Resistance Setup',
+        isSpike: item.volume_spike || false,
+        status: statusInfo
+      };
+    });
+
+  // 🔥 3. PURE Monthly Buy: અસલી મંથલી સપોર્ટ ઝોન વાળા સ્ટોક્સ
   const monthlyBuyStocks = liveMarketStocks
-    .filter((item, idx) => {
+    .filter(item => {
       const ltp = item.ltp;
-      const support = item.monthly?.support || ltp * 0.97;
-      return ltp >= support || idx % 3 === 0;
+      const support = item.monthly?.support || item.weekly?.support;
+      return support && ltp >= support && ltp <= (support * 1.04);
     })
-    .map(item => ({
-      name: item.name || item.symbol,
-      ltp: item.ltp,
-      type: 'BUY',
-      sl: Number((item.monthly?.support || item.ltp * 0.97).toFixed(1)),
-      slDesc: 'Monthly Support SL',
-      target: Number((item.monthly?.gann?.up?.g180 || item.ltp * 1.08).toFixed(1)),
-      targetDesc: 'Monthly 180° Up Target',
-      rr: '1 : 4.5',
-      desc: 'Static Scanner Monthly Buy Setup'
-    }));
+    .map(item => {
+      const ltp = item.ltp;
+      const sl = Number((support * 0.98).toFixed(1));
+      const target = Number((item.monthly?.gann?.up?.g360 || ltp * 1.12).toFixed(1));
+      const statusInfo = getTradeStatus(ltp, target, sl, 'BUY');
 
-  // 🔥 4. Monthly Sell Setups (બલેન્સ્ડ ફિલ્ટર લૉજિક સાથે)
+      return {
+        name: item.name || item.symbol,
+        ltp: ltp,
+        type: 'BUY',
+        sl: sl,
+        slDesc: 'Monthly Support SL',
+        target: target,
+        targetDesc: 'Monthly 360° Mega Target',
+        rr: '1 : 7.0',
+        desc: 'Pure Monthly Support Setup',
+        isSpike: item.volume_spike || false,
+        status: statusInfo
+      };
+    });
+
+  // 🔥 4. PURE Monthly Sell: અસલી મંથલી રેઝિસ્ટન્સ ઝોન વાળા સ્ટોક્સ
   const monthlySellStocks = liveMarketStocks
-    .filter((item, idx) => {
+    .filter(item => {
       const ltp = item.ltp;
-      const resistance = item.monthly?.resistance || ltp * 1.03;
-      return ltp < resistance || idx % 3 !== 0;
+      const resistance = item.monthly?.resistance || item.weekly?.resistance;
+      return resistance && ltp <= resistance && ltp >= (resistance * 0.96);
     })
-    .map(item => ({
-      name: item.name || item.symbol,
-      ltp: item.ltp,
-      type: 'SHORT',
-      sl: Number((item.monthly?.resistance || item.ltp * 1.03).toFixed(1)),
-      slDesc: 'Monthly Resistance SL',
-      target: Number((item.monthly?.gann?.down?.g180 || item.ltp * 0.92).toFixed(1)),
-      targetDesc: 'Monthly 180° Down Target',
-      rr: '1 : 4.5',
-      desc: 'Static Scanner Monthly Sell Setup'
-    }));
+    .map(item => {
+      const ltp = item.ltp;
+      const sl = Number((resistance * 1.02).toFixed(1));
+      const target = Number((item.monthly?.gann?.down?.g360 || ltp * 0.88).toFixed(1));
+      const statusInfo = getTradeStatus(ltp, target, sl, 'SHORT');
+
+      return {
+        name: item.name || item.symbol,
+        ltp: ltp,
+        type: 'SHORT',
+        sl: sl,
+        slDesc: 'Monthly Resistance SL',
+        target: target,
+        targetDesc: 'Monthly 360° Down Target',
+        rr: '1 : 7.0',
+        desc: 'Pure Monthly Resistance Setup',
+        isSpike: item.volume_spike || false,
+        status: statusInfo
+      };
+    });
 
   const weeklyBuySetups = [...weeklyBuyStocks, ...customAddedSetups.filter(i => i.type === 'BUY' && i.duration === 'weekly')];
   const weeklySellSetups = [...weeklySellStocks, ...customAddedSetups.filter(i => i.type === 'SHORT' && i.duration === 'weekly')];
@@ -157,9 +204,10 @@ export default function SwingTradesModule({ marketData = [] }) {
         slDesc: tradeType === 'BUY' ? '45° Support SL' : '45° Resistance SL',
         target: target,
         targetDesc: tradeType === 'BUY' ? '360° Mega Target' : '360° Down Target',
-        rr: '1 : 4.0',
+        rr: '1 : 5.5',
         desc: 'Manual Custom Setup',
-        duration: duration
+        duration: duration,
+        status: { status: '⚡ Active', color: '#2563eb', bg: '#eff6ff' }
       };
 
       setCustomAddedSetups([newItem, ...customAddedSetups]);
@@ -171,7 +219,7 @@ export default function SwingTradesModule({ marketData = [] }) {
   };
 
   const handleCopyForSocial = () => {
-    let text = `🚀 *AURA TERMINAL - SWING TRADES* 🚀\n`;
+    let text = `🚀 *AURA TERMINAL - PURE SWING TRADES* 🚀\n`;
     text = text + `Mode: ${subTab.toUpperCase()}\n`;
     text = text + `-----------------------------------\n\n`;
 
@@ -180,6 +228,7 @@ export default function SwingTradesModule({ marketData = [] }) {
       text = text + `    LTP: ₹ ${item.ltp}\n`;
       text = text + `    SL: ₹ ${item.sl} (${item.slDesc})\n`;
       text = text + `    Target: ₹ ${item.target} (${item.targetDesc})\n`;
+      text = text + `    Status: ${item.status.status}\n`;
       text = text + `    R:R: ${item.rr}\n\n`;
     });
 
@@ -206,7 +255,7 @@ export default function SwingTradesModule({ marketData = [] }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Real Swing Trades Setup (All F&O Scanned)</h2>
+          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Pure Swing Trades (Support/Resistance Filtered)</h2>
           <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>
             {isLoading ? 'Scanning all stocks from server...' : `Total Loaded: ${liveMarketStocks.length} Stocks`}
           </p>
@@ -306,13 +355,14 @@ function TableView({ data, title, onSelect }) {
               <th style={{ padding: '12px 20px' }}>LTP</th>
               <th style={{ padding: '12px 20px' }}>Stop-Loss (SL)</th>
               <th style={{ padding: '12px 20px' }}>Target</th>
+              <th style={{ padding: '12px 20px' }}>Status</th>
               <th style={{ padding: '12px 20px' }}>Risk : Reward</th>
             </tr>
           </thead>
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No active setups found. Click "Scan All" above!</td>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No pure setups found matching support/resistance criteria right now.</td>
               </tr>
             ) : (
               data.map((item, idx) => (
@@ -327,10 +377,23 @@ function TableView({ data, title, onSelect }) {
                   </td>
                   <td style={{ padding: '14px 20px' }}>
                     <div style={{ fontWeight: 'bold', color: '#18181b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {item.name} 
+                      <a 
+                        href={`https://in.tradingview.com/chart/?symbol=NSE:${item.name}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        style={{ color: '#2563eb', textDecoration: 'underline' }}
+                        title="Open TradingView Chart"
+                      >
+                        {item.name} 🔗
+                      </a>
                       <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', backgroundColor: item.type === 'BUY' ? '#dcfce7' : '#fee2e2', color: item.type === 'BUY' ? '#15803d' : '#b91c1c' }}>
                         {item.type}
                       </span>
+                      {item.isSpike && (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', backgroundColor: '#fef3c7', color: '#d97706', fontWeight: 'bold' }}>
+                          ⚡ Vol Spike
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: '11px', color: '#71717a', fontStyle: 'italic', marginTop: '2px' }}>{item.desc}</div>
                   </td>
@@ -342,6 +405,11 @@ function TableView({ data, title, onSelect }) {
                   <td style={{ padding: '14px 20px', color: '#15803d', fontWeight: '600' }}>
                     ₹ {item.target}
                     <div style={{ fontSize: '11px', fontWeight: 'normal', color: '#15803d' }}>({item.targetDesc})</div>
+                  </td>
+                  <td style={{ padding: '14px 20px' }}>
+                    <span style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', backgroundColor: item.status.bg, color: item.status.color }}>
+                      {item.status.status}
+                    </span>
                   </td>
                   <td style={{ padding: '14px 20px', fontWeight: 'bold', color: '#2563eb' }}>{item.rr}</td>
                 </tr>

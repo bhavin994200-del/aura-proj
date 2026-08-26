@@ -6,58 +6,55 @@ export default function SwingTradesModule() {
   const [selectedStock, setSelectedStock] = useState('');
   const [tradeType, setTradeType] = useState('BUY');
   const [liveMarketStocks, setLiveMarketStocks] = useState(() => {
-    // 🔥 સ્ટેટિક સ્કેનર અથવા ઓપન પ્રાઇસના કેશ્ડ ડેટામાંથી સીધો જ આખો ડેટા પકડશે (સર્વર લોડ ફ્રી)
+    // 🔥 Static Scanner ના કેશ્ડ માસ્ટર ડેટામાંથી સીધો જ ડેટા લોડ કરશે
     const cachedMaster = localStorage.getItem('master_cached_market_data');
-    const cachedOpen = localStorage.getItem('vedicedge_openprice_data');
-    const cachedSwing = localStorage.getItem('aura_swing_cache_data');
-
     if (cachedMaster) {
       try {
         const parsed = JSON.parse(cachedMaster);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
-    }
-    if (cachedOpen) {
-      try {
-        const parsed = JSON.parse(cachedOpen);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
-    }
-    if (cachedSwing) {
-      try {
-        const parsed = JSON.parse(cachedSwing);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
+      } catch (e) {
+        console.log("Cache parse error");
+      }
     }
     return [];
   });
-  
   const [isLoading, setIsLoading] = useState(false);
   const [customAddedSetups, setCustomAddedSetups] = useState([]);
 
   useEffect(() => {
-    // જો કેશ ખાલી હોય તો જ બેકએન્ડને હિટ કરશે
     if (liveMarketStocks.length === 0) {
-      fetchAllStaticData();
+      loadStaticScannerData();
     }
   }, []);
 
-  const fetchAllStaticData = async () => {
+  const loadStaticScannerData = async () => {
     setIsLoading(true);
+    const cachedMaster = localStorage.getItem('master_cached_market_data');
+    if (cachedMaster) {
+      try {
+        const parsed = JSON.parse(cachedMaster);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setLiveMarketStocks(parsed);
+          setIsLoading(false);
+          return;
+        }
+      } catch (e) {}
+    }
+
     try {
-      // સર્વર પર ઓવરલોડ ન થાય તે માટે માત્ર પ્રાઇમરી લિસ્ટ સ્કેન કરશે અથવા કેશ વાપરશે
+      // જો કેશ ખાલી હોય તો મુખ્ય સ્ટોક્સનું લિસ્ટ સ્કેન કરશે
       const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: fullFnoList.slice(0, 50) }) // શરુઆતના મુખ્ય સ્ટોક્સ બેચમાં સ્કેન કરશે
+        body: JSON.stringify({ symbols: fullFnoList.slice(0, 50) })
       });
       const json = await res.json();
       if (json.data && json.data.length > 0) {
         setLiveMarketStocks(json.data);
-        localStorage.setItem('aura_swing_cache_data', JSON.stringify(json.data));
+        localStorage.setItem('master_cached_market_data', JSON.stringify(json.data));
       }
     } catch (err) {
-      console.error("Error scanning static pivot for swing trades:", err);
+      console.error("Error loading scanner data:", err);
     }
     setIsLoading(false);
   };
@@ -74,17 +71,19 @@ export default function SwingTradesModule() {
     }
   };
 
-  // 🔥 1. Weekly Buy Setups (LTP પ્રમાણે સોર્ટ કરેલા)
+  // 🔥 1. Weekly Buy Setups (Static Scanner લેવલ્સ સાથે)
   const weeklyBuyStocks = liveMarketStocks
     .filter(item => {
       const ltp = item.ltp;
       const support = item.weekly?.support;
-      return support && ltp >= support && ltp <= (support * 1.04);
+      return support && ltp >= support && ltp <= (support * 1.05);
     })
     .map(item => {
       const ltp = item.ltp;
-      const sl = Number((item.weekly.support * 0.99).toFixed(1));
-      const target = Number((item.weekly?.gann?.up?.g360 || ltp * 1.08).toFixed(1));
+      const supportVal = item.weekly?.support || ltp * 0.98;
+      const resistanceVal = item.weekly?.resistance || ltp * 1.05;
+      const sl = Number((supportVal * 0.99).toFixed(1));
+      const target = Number((item.weekly?.gann?.up?.g360 || resistanceVal).toFixed(1));
       const statusInfo = getTradeStatus(ltp, target, sl, 'BUY');
 
       return {
@@ -92,12 +91,12 @@ export default function SwingTradesModule() {
         ltp: ltp,
         type: 'BUY',
         sl: sl,
-        slDesc: 'Weekly Support SL',
+        slDesc: 'Weekly Support',
         target: target,
-        targetDesc: 'Weekly 360° Mega Target',
-        rr: '1 : 5.5',
-        desc: 'Static Weekly Support Setup',
-        isSpike: item.volume_spike || false,
+        targetDesc: 'Weekly Resistance / 360°',
+        support: supportVal,
+        resistance: resistanceVal,
+        rr: '1 : 5.0',
         status: statusInfo
       };
     })
@@ -108,12 +107,14 @@ export default function SwingTradesModule() {
     .filter(item => {
       const ltp = item.ltp;
       const resistance = item.weekly?.resistance;
-      return resistance && ltp <= resistance && ltp >= (resistance * 0.96);
+      return resistance && ltp <= resistance && ltp >= (resistance * 0.95);
     })
     .map(item => {
       const ltp = item.ltp;
-      const sl = Number((item.weekly.resistance * 1.01).toFixed(1));
-      const target = Number((item.weekly?.gann?.down?.g360 || ltp * 0.92).toFixed(1));
+      const supportVal = item.weekly?.support || ltp * 0.95;
+      const resistanceVal = item.weekly?.resistance || ltp * 1.02;
+      const sl = Number((resistanceVal * 1.01).toFixed(1));
+      const target = Number((item.weekly?.gann?.down?.g360 || supportVal).toFixed(1));
       const statusInfo = getTradeStatus(ltp, target, sl, 'SHORT');
 
       return {
@@ -121,12 +122,12 @@ export default function SwingTradesModule() {
         ltp: ltp,
         type: 'SHORT',
         sl: sl,
-        slDesc: 'Weekly Resistance SL',
+        slDesc: 'Weekly Resistance',
         target: target,
-        targetDesc: 'Weekly 360° Down Target',
-        rr: '1 : 5.5',
-        desc: 'Static Weekly Resistance Setup',
-        isSpike: item.volume_spike || false,
+        targetDesc: 'Weekly Support / 360°',
+        support: supportVal,
+        resistance: resistanceVal,
+        rr: '1 : 5.0',
         status: statusInfo
       };
     })
@@ -137,13 +138,14 @@ export default function SwingTradesModule() {
     .filter(item => {
       const ltp = item.ltp;
       const support = item.monthly?.support || item.weekly?.support;
-      return support && ltp >= support && ltp <= (support * 1.05);
+      return support && ltp >= support && ltp <= (support * 1.06);
     })
     .map(item => {
       const ltp = item.ltp;
       const supportVal = item.monthly?.support || item.weekly?.support;
+      const resistanceVal = item.monthly?.resistance || item.weekly?.resistance;
       const sl = Number((supportVal * 0.98).toFixed(1));
-      const target = Number((item.monthly?.gann?.up?.g360 || ltp * 1.12).toFixed(1));
+      const target = Number((item.monthly?.gann?.up?.g360 || resistanceVal * 1.05).toFixed(1));
       const statusInfo = getTradeStatus(ltp, target, sl, 'BUY');
 
       return {
@@ -151,12 +153,12 @@ export default function SwingTradesModule() {
         ltp: ltp,
         type: 'BUY',
         sl: sl,
-        slDesc: 'Monthly Support SL',
+        slDesc: 'Monthly Support',
         target: target,
-        targetDesc: 'Monthly 360° Mega Target',
-        rr: '1 : 7.0',
-        desc: 'Static Monthly Support Setup',
-        isSpike: item.volume_spike || false,
+        targetDesc: 'Monthly Resistance',
+        support: supportVal,
+        resistance: resistanceVal,
+        rr: '1 : 6.0',
         status: statusInfo
       };
     })
@@ -167,13 +169,14 @@ export default function SwingTradesModule() {
     .filter(item => {
       const ltp = item.ltp;
       const resistance = item.monthly?.resistance || item.weekly?.resistance;
-      return resistance && ltp <= resistance && ltp >= (resistance * 0.95);
+      return resistance && ltp <= resistance && ltp >= (resistance * 0.94);
     })
     .map(item => {
       const ltp = item.ltp;
-      const resVal = item.monthly?.resistance || item.weekly?.resistance;
-      const sl = Number((resVal * 1.02).toFixed(1));
-      const target = Number((item.monthly?.gann?.down?.g360 || ltp * 0.88).toFixed(1));
+      const supportVal = item.monthly?.support || item.weekly?.support;
+      const resistanceVal = item.monthly?.resistance || item.weekly?.resistance;
+      const sl = Number((resistanceVal * 1.02).toFixed(1));
+      const target = Number((item.monthly?.gann?.down?.g360 || supportVal * 0.95).toFixed(1));
       const statusInfo = getTradeStatus(ltp, target, sl, 'SHORT');
 
       return {
@@ -181,12 +184,12 @@ export default function SwingTradesModule() {
         ltp: ltp,
         type: 'SHORT',
         sl: sl,
-        slDesc: 'Monthly Resistance SL',
+        slDesc: 'Monthly Resistance',
         target: target,
-        targetDesc: 'Monthly 360° Down Target',
-        rr: '1 : 7.0',
-        desc: 'Static Monthly Resistance Setup',
-        isSpike: item.volume_spike || false,
+        targetDesc: 'Monthly Support',
+        support: supportVal,
+        resistance: resistanceVal,
+        rr: '1 : 6.0',
         status: statusInfo
       };
     })
@@ -213,7 +216,6 @@ export default function SwingTradesModule() {
   const handleAddCustomSwing = async (e) => {
     e.preventDefault();
     if (!selectedStock) return;
-
     const cleanSymbol = selectedStock.trim().toUpperCase();
     try {
       const res = await fetch('https://aura-proj.onrender.com/calculate-stock', {
@@ -233,39 +235,39 @@ export default function SwingTradesModule() {
         ltp: currentLtp,
         type: tradeType,
         sl: sl,
-        slDesc: tradeType === 'BUY' ? '45° Support SL' : '45° Resistance SL',
+        slDesc: 'Custom SL',
         target: target,
-        targetDesc: tradeType === 'BUY' ? '360° Mega Target' : '360° Down Target',
-        rr: '1 : 5.5',
-        desc: 'Manual Custom Setup',
+        targetDesc: 'Custom Target',
+        support: currentLtp * 0.99,
+        resistance: currentLtp * 1.01,
+        rr: '1 : 5.0',
         duration: duration,
         status: { status: '⚡ Active', color: '#2563eb', bg: '#eff6ff' }
       };
 
       setCustomAddedSetups([newItem, ...customAddedSetups]);
       setSelectedStock('');
-      alert(`Real swing setup added for ${cleanSymbol}!`);
+      alert(`Custom setup added for ${cleanSymbol}!`);
     } catch (err) {
-      alert("Error fetching stock data from backend!");
+      alert("Error fetching stock data!");
     }
   };
 
   const handleCopyForSocial = () => {
-    let text = `🚀 *AURA TERMINAL - CACHED SWING TRADES* 🚀\n`;
+    let text = `🚀 *AURA TERMINAL - STATIC SWING TRADES* 🚀\n`;
     text = text + `Mode: ${subTab.toUpperCase()}\n`;
     text = text + `-----------------------------------\n\n`;
 
     currentData.forEach((item, index) => {
       text = text + `${index + 1}. *${item.name}* (${item.type})\n`;
       text = text + `    LTP: ₹ ${item.ltp}\n`;
-      text = text + `    SL: ₹ ${item.sl} (${item.slDesc})\n`;
-      text = text + `    Target: ₹ ${item.target} (${item.targetDesc})\n`;
-      text = text + `    Status: ${item.status.status}\n`;
-      text = text + `    R:R: ${item.rr}\n\n`;
+      text = text + `    Support: ₹ ${Number(item.support).toFixed(1)} | Resistance: ₹ ${Number(item.resistance).toFixed(1)}\n`;
+      text = text + `    SL: ₹ ${item.sl} | Target: ₹ ${item.target}\n`;
+      text = text + `    Status: ${item.status.status}\n\n`;
     });
 
     navigator.clipboard.writeText(text);
-    alert("Copied to clipboard!");
+    alert("Copied setups to clipboard!");
   };
 
   const handleSelectStock = (sym) => {
@@ -274,9 +276,9 @@ export default function SwingTradesModule() {
       if (!savedWatchlist.includes(sym)) {
         const updatedList = [sym, ...savedWatchlist];
         localStorage.setItem('aura_watchlist', JSON.stringify(updatedList));
-        alert(`Stock ${sym} added to Home Dashboard!`);
+        alert(`Stock ${sym} added to Watchlist!`);
       } else {
-        alert(`Stock ${sym} is already in your Home Dashboard.`);
+        alert(`Stock ${sym} is already in Watchlist.`);
       }
     } catch (err) {
       alert("Failed to add stock.");
@@ -287,19 +289,19 @@ export default function SwingTradesModule() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Cached Swing Trades (LTP Sorted)</h2>
+          <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>🚀 Static Scanner Based Swing Trades</h2>
           <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>
-            {isLoading ? 'Loading from cache...' : `Loaded Database: ${liveMarketStocks.length} Stocks`}
+            {isLoading ? 'Loading scanner cache...' : `Loaded Database: ${liveMarketStocks.length} Stocks from Scanner`}
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button 
-            onClick={fetchAllStaticData}
+            onClick={loadStaticScannerData}
             disabled={isLoading}
             style={{ padding: '8px 12px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
           >
-            {isLoading ? 'Scanning...' : '⚡ Force Refresh'}
+            {isLoading ? 'Loading...' : '⚡ Reload Scanner Data'}
           </button>
 
           <button 
@@ -336,13 +338,13 @@ export default function SwingTradesModule() {
         </div>
       </div>
 
-      {/* Manual Add Swing Setup Form */}
+      {/* Manual Add Form */}
       <form onSubmit={handleAddCustomSwing} style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: '#f4f4f5', padding: '15px', borderRadius: '10px', border: '1px solid #d4d4d8', alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: '2', minWidth: '200px' }}>
           <input 
             type="text" 
             list="swing-fno-list"
-            placeholder="Select or type stock from F&O..." 
+            placeholder="Type stock symbol..." 
             value={selectedStock} 
             onChange={(e) => setSelectedStock(e.target.value)} 
             style={{ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #a1a1aa', background: 'white', boxSizing: 'border-box' }} 
@@ -356,12 +358,12 @@ export default function SwingTradesModule() {
         </div>
 
         <select value={tradeType} onChange={(e) => setTradeType(e.target.value)} style={{ padding: '9px', borderRadius: '6px', border: '1px solid #a1a1aa', background: 'white', fontWeight: 'bold' }}>
-          <option value="BUY">🟢 BUY SWING</option>
-          <option value="SHORT">🔴 SHORT SWING</option>
+          <option value="BUY">🟢 BUY SETUP</option>
+          <option value="SHORT">🔴 SELL SETUP</option>
         </select>
 
         <button type="submit" style={{ padding: '9px 20px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-          + Add Custom Setup
+          + Add Setup
         </button>
       </form>
 
@@ -382,19 +384,21 @@ function TableView({ data, title, onSelect }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
           <thead style={{ position: 'sticky', top: 0, backgroundColor: '#fafafa', zIndex: '1' }}>
             <tr style={{ borderBottom: '1px solid #e4e4e7', color: '#71717a' }}>
-              <th style={{ padding: '12px 20px', width: '90px' }}>Action</th>
-              <th style={{ padding: '12px 20px' }}>Symbol & Setup</th>
-              <th style={{ padding: '12px 20px' }}>LTP</th>
-              <th style={{ padding: '12px 20px' }}>Stop-Loss (SL)</th>
-              <th style={{ padding: '12px 20px' }}>Target</th>
+              <th style={{ padding: '12px 20px', width: '80px' }}>Action</th>
+              <th style={{ padding: '12px 20px' }}>Symbol</th>
+              <th style={{ padding: '12px 20px' }}>LTP (₹)</th>
+              <th style={{ padding: '12px 20px' }}>Support (₹)</th>
+              <th style={{ padding: '12px 20px' }}>Resistance (₹)</th>
+              <th style={{ padding: '12px 20px' }}>SL / Target</th>
               <th style={{ padding: '12px 20px' }}>Status</th>
-              <th style={{ padding: '12px 20px' }}>Risk : Reward</th>
             </tr>
           </thead>
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>No cached swing setups found. Open Static Scanner tab once to cache data!</td>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#71717a' }}>
+                  No setups found. Please visit "Static Scanner" tab once to load scanner cache!
+                </td>
               </tr>
             ) : (
               data.map((item, idx) => (
@@ -404,7 +408,7 @@ function TableView({ data, title, onSelect }) {
                       onClick={() => onSelect(item.name)}
                       style={{ padding: '5px 10px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
                     >
-                      + Select
+                      + Watch
                     </button>
                   </td>
                   <td style={{ padding: '14px 20px' }}>
@@ -421,29 +425,20 @@ function TableView({ data, title, onSelect }) {
                       <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', backgroundColor: item.type === 'BUY' ? '#dcfce7' : '#fee2e2', color: item.type === 'BUY' ? '#15803d' : '#b91c1c' }}>
                         {item.type}
                       </span>
-                      {item.isSpike && (
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '3px', backgroundColor: '#fef3c7', color: '#d97706', fontWeight: 'bold' }}>
-                          ⚡ Vol Spike
-                        </span>
-                      )}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#71717a', fontStyle: 'italic', marginTop: '2px' }}>{item.desc}</div>
                   </td>
-                  <td style={{ padding: '14px 20px', color: '#27272a', fontWeight: 'bold' }}>₹ {item.ltp}</td>
-                  <td style={{ padding: '14px 20px', color: '#b91c1c', fontWeight: '600' }}>
-                    ₹ {item.sl}
-                    <div style={{ fontSize: '11px', fontWeight: 'normal', color: '#b91c1c' }}>({item.slDesc})</div>
-                  </td>
-                  <td style={{ padding: '14px 20px', color: '#15803d', fontWeight: '600' }}>
-                    ₹ {item.target}
-                    <div style={{ fontSize: '11px', fontWeight: 'normal', color: '#15803d' }}>({item.targetDesc})</div>
+                  <td style={{ padding: '14px 20px', color: '#27272a', fontWeight: 'bold' }}>₹{item.ltp}</td>
+                  <td style={{ padding: '14px 20px', color: '#16a34a', fontWeight: '600' }}>₹{Number(item.support).toFixed(1)}</td>
+                  <td style={{ padding: '14px 20px', color: '#dc2626', fontWeight: '600' }}>₹{Number(item.resistance).toFixed(1))}</td>
+                  <td style={{ padding: '14px 20px', fontSize: '12px' }}>
+                    <div style={{ color: '#b91c1c' }}>SL: ₹{item.sl}</div>
+                    <div style={{ color: '#15803d' }}>Tgt: ₹{item.target}</div>
                   </td>
                   <td style={{ padding: '14px 20px' }}>
                     <span style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', backgroundColor: item.status.bg, color: item.status.color }}>
                       {item.status.status}
                     </span>
                   </td>
-                  <td style={{ padding: '14px 20px', fontWeight: 'bold', color: '#2563eb' }}>{item.rr}</td>
                 </tr>
               ))
             )}

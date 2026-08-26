@@ -10,44 +10,13 @@ function StaticPivotScanner() {
   const [swingFilter, setSwingFilter] = useState('all'); 
   const [actionableFilter, setActionableFilter] = useState('all'); 
   const [watchlist, setWatchlist] = useState([]); 
-  const [tradeLog, setTradeLog] = useState([]); 
-  const [notifications, setNotifications] = useState([]); 
   const [activeTab, setActiveTab] = useState('scanner'); 
   const [weeklyDate, setWeeklyDate] = useState('');
   const [monthlyDate, setMonthlyDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(''); 
 
-  const [webhookUrl, setWebhookUrl] = useState(localStorage.getItem('user_webhook_url') || '');
-  const [showWebhookModal, setShowWebhookModal] = useState(false);
-
   const dataFetchedRef = useRef(false);
-
-  const playBeepSound = () => {
-    try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
-      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.3);
-    } catch (e) { console.log(e); }
-  };
-
-  const sendWebhookAlert = async (title, message) => {
-    if (!webhookUrl) return;
-    try {
-      await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: `🚨 *${title}* \n${message}` })
-      });
-    } catch (e) { console.log("Webhook Error:", e); }
-  };
 
   const fetchStaticData = async (isManual = false) => {
     if (!isManual && staticData.length > 0) return;
@@ -74,43 +43,6 @@ function StaticPivotScanner() {
       localStorage.setItem('cached_weekly_date', wDate);
       localStorage.setItem('cached_monthly_date', mDate);
 
-      const savedWatch = JSON.parse(localStorage.getItem('my_watchlist') || '[]');
-      const lastAlerts = JSON.parse(localStorage.getItem('last_alert_timestamps') || '{}');
-      const currentTimeMs = new Date().getTime();
-
-      fetchedData.forEach(item => {
-        if (savedWatch.includes(item.symbol)) {
-          const d = item.weekly || {};
-          const safe = getSafeValues(d.close);
-          const sVal = d.support || safe.support;
-          const rVal = d.resistance || safe.resistance;
-
-          if (sVal && rVal) {
-            const isNearSupport = Math.abs(item.ltp - sVal) / sVal <= 0.005;
-            const isNearResistance = Math.abs(item.ltp - rVal) / rVal <= 0.005;
-            
-            const alertKeySup = `${item.symbol}_SUPPORT`;
-            const alertKeyRes = `${item.symbol}_RESISTANCE`;
-            
-            const lastAlertTimeSup = lastAlerts[alertKeySup] || 0;
-            const lastAlertTimeRes = lastAlerts[alertKeyRes] || 0;
-
-            if (isNearSupport && (currentTimeMs - lastAlertTimeSup > 1800000)) {
-              playBeepSound();
-              triggerNotification(`⭐ Watchlist Bottom Reversal: ${item.symbol}`, `LTP: ₹${item.ltp} near Support (₹${sVal})`);
-              sendWebhookAlert(`Watchlist Bottom Reversal: ${item.symbol}`, `LTP: ₹${item.ltp} near Support (₹${sVal})`);
-              lastAlerts[alertKeySup] = currentTimeMs;
-            } else if (isNearResistance && (currentTimeMs - lastAlertTimeRes > 1800000)) {
-              playBeepSound();
-              triggerNotification(`⭐ Watchlist Top Rejection: ${item.symbol}`, `LTP: ₹${item.ltp} near Resistance (₹${rVal})`);
-              sendWebhookAlert(`Watchlist Top Rejection: ${item.symbol}`, `LTP: ₹${item.ltp} near Resistance (₹${rVal})`);
-              lastAlerts[alertKeyRes] = currentTimeMs;
-            }
-          }
-        }
-      });
-      localStorage.setItem('last_alert_timestamps', JSON.stringify(lastAlerts));
-
     } catch(e) { console.log(e); }
     setLoading(false);
   };
@@ -135,76 +67,14 @@ function StaticPivotScanner() {
 
     const savedWatch = localStorage.getItem('my_watchlist');
     if (savedWatch) setWatchlist(JSON.parse(savedWatch));
-    const savedLog = localStorage.getItem('trade_logbook');
-    if (savedLog) setTradeLog(JSON.parse(savedLog));
-    const savedNotif = localStorage.getItem('notification_history');
-    if (savedNotif) setNotifications(JSON.parse(savedNotif));
-
-    if (Notification && Notification.permission !== "granted") {
-      Notification.requestPermission();
-    }
 
     return () => clearInterval(interval);
   }, []);
-
-  const triggerNotification = (title, body) => {
-    if (Notification && Notification.permission === "granted") {
-      new Notification(title, { body });
-    }
-    const newNotif = { date: new Date().toLocaleString(), title, body };
-    setNotifications(prev => {
-      if (prev.length > 0 && prev[0].title === title && prev[0].body === body) return prev;
-      const updated = [newNotif, ...prev];
-      localStorage.setItem('notification_history', JSON.stringify(updated));
-      return updated;
-    });
-  };
 
   const toggleWatchlist = (symbol) => {
     let updated = watchlist.includes(symbol) ? watchlist.filter(s => s !== symbol) : [...watchlist, symbol];
     setWatchlist(updated);
     localStorage.setItem('my_watchlist', JSON.stringify(updated));
-  };
-
-  const addToLogbook = (item, d, supportVal, resistanceVal) => {
-    const up = d.gann?.up || {};
-    const down = d.gann?.down || {};
-    const setupTypeLabel = staticSubTab === 'weekly' ? '📅 Weekly Setup' : '🗓️ Monthly Setup';
-
-    const newEntry = {
-      date: new Date().toLocaleString(),
-      symbol: item.symbol,
-      ltp: item.ltp,
-      type: setupTypeLabel,
-      close: Number(d.close || 0).toFixed(2),
-      support: supportVal,
-      resistance: resistanceVal,
-      gannUp: `45°: ₹${up.g45} | 90°: ₹${up.g90} | 180°: ₹${up.g180} | 360°: ₹${up.g360}`,
-      gannDown: `45°: ₹${down.g45} | 90°: ₹${down.g90} | 180°: ₹${down.g180} | 360°: ₹${down.g360}`,
-      status: item.ltp > resistanceVal ? 'Breakout / Sell' : item.ltp < supportVal ? 'Breakdown / Buy' : 'In Range'
-    };
-    const updatedLog = [newEntry, ...tradeLog];
-    setTradeLog(updatedLog);
-    localStorage.setItem('trade_logbook', JSON.stringify(updatedLog));
-    triggerNotification(`📝 Manual Log: ${item.symbol}`, `${setupTypeLabel} | LTP: ₹${item.ltp}`);
-    alert(`📝 ${item.symbol} નું લૉગબુકમાં સેવ થઈ ગયું છે!`);
-  };
-
-  const exportToCSV = () => {
-    let csvContent = "data:text/csv;charset=utf-8,Symbol,LTP,Close,Support,Resistance,Type\n";
-    filteredData.forEach(item => {
-      const d = item[staticSubTab] || {};
-      const safe = getSafeValues(d.close);
-      const closeFormatted = Number(d.close || 0).toFixed(2);
-      csvContent += `${item.symbol},${item.ltp},${closeFormatted},${d.support || safe.support},${d.resistance || safe.resistance},${staticSubTab}\n`;
-    });
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Static_Pivot_${staticSubTab}_report.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const getSafeValues = (closePrice) => {
@@ -348,7 +218,6 @@ function StaticPivotScanner() {
         const supportVal = d.support || safe.support;
         const resistanceVal = d.resistance || safe.resistance;
         const up = d.gann?.up || {};
-        const down = d.gann?.down || {};
         const closeFormatted = Number(d.close || 0).toFixed(2);
         text += `Stock: ${item.symbol} | Close: ₹${closeFormatted} | LTP: ₹${item.ltp}\n🟢 Support: ₹${supportVal} | 🔴 Resistance: ₹${resistanceVal}\n📈 Up 45°: ₹${up.g45} | 90°: ₹${up.g90}\n-----------------------------------\n`;
       }
@@ -370,258 +239,161 @@ function StaticPivotScanner() {
           <button onClick={() => setActiveTab('confluence')} style={{ padding: '8px 12px', background: activeTab === 'confluence' ? '#7c3aed' : '#e2e8f0', color: activeTab === 'confluence' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>🎯 Confluence (2/2)</button>
           <button onClick={() => setActiveTab('orbMomentum')} style={{ padding: '8px 12px', background: activeTab === 'orbMomentum' ? '#16a34a' : '#e2e8f0', color: activeTab === 'orbMomentum' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>🚀 ORB & Momentum</button>
           <button onClick={() => setActiveTab('watchlist')} style={{ padding: '8px 12px', background: activeTab === 'watchlist' ? '#d97706' : '#e2e8f0', color: activeTab === 'watchlist' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>⭐ Watchlist ({watchlist.length})</button>
-          <button onClick={() => setActiveTab('logbook')} style={{ padding: '8px 12px', background: activeTab === 'logbook' ? '#059669' : '#e2e8f0', color: activeTab === 'logbook' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📖 Logbook ({tradeLog.length})</button>
-          <button onClick={() => setActiveTab('notifications')} style={{ padding: '8px 12px', background: activeTab === 'notifications' ? '#dc2626' : '#e2e8f0', color: activeTab === 'notifications' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>🔔 Alerts ({notifications.length})</button>
-          
-          <button onClick={() => setShowWebhookModal(true)} style={{ padding: '8px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>💬 Webhook Config</button>
         </div>
       </div>
 
-      {showWebhookModal && (
-        <div style={{ background: '#f0fdf4', padding: '15px', borderRadius: '10px', border: '1px solid #bbf7d0', marginBottom: '15px' }}>
-          <h4 style={{ margin: '0 0 8px 0', color: '#166534' }}>💬 WhatsApp / Telegram Webhook URL Setup</h4>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input 
-              type="text" 
-              placeholder="Paste Discord / Telegram / WhatsApp Webhook URL here..." 
-              value={webhookUrl}
-              onChange={(e) => setWebhookUrl(e.target.value)}
-              style={{ padding: '8px', flex: 1, borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
-            />
-            <button onClick={() => {
-              localStorage.setItem('user_webhook_url', webhookUrl);
-              setShowWebhookModal(false);
-              alert('✅ Webhook URL Save થઈ ગયું છે!');
-            }} style={{ padding: '8px 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Save</button>
-            <button onClick={() => setShowWebhookModal(false)} style={{ padding: '8px 12px', background: '#64748b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button>
-          </div>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={() => setStaticSubTab('weekly')} style={{ padding: '8px 16px', background: staticSubTab === 'weekly' ? '#166534' : '#e2e8f0', color: staticSubTab === 'weekly' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>📅 Weekly Fixed Levels</button>
+        <button onClick={() => setStaticSubTab('monthly')} style={{ padding: '8px 16px', background: staticSubTab === 'monthly' ? '#166534' : '#e2e8f0', color: staticSubTab === 'monthly' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🗓️ Monthly Fixed Levels</button>
+        
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button onClick={() => copyAllList(staticSubTab)} style={{ padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>📋 Copy Filtered List</button>
+          <button onClick={() => fetchStaticData(true)} disabled={loading} style={{ padding: '8px 16px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+            {loading ? "Loading..." : "🔄 Refresh Data"}
+          </button>
         </div>
-      )}
+      </div>
 
-      {activeTab !== 'logbook' && activeTab !== 'notifications' && (
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button onClick={() => setStaticSubTab('weekly')} style={{ padding: '8px 16px', background: staticSubTab === 'weekly' ? '#166534' : '#e2e8f0', color: staticSubTab === 'weekly' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>📅 Weekly Fixed Levels</button>
-          <button onClick={() => setStaticSubTab('monthly')} style={{ padding: '8px 16px', background: staticSubTab === 'monthly' ? '#166534' : '#e2e8f0', color: staticSubTab === 'monthly' ? 'white' : '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🗓️ Monthly Fixed Levels</button>
-          
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button onClick={exportToCSV} style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>📥 Export Excel (CSV)</button>
-            <button onClick={() => copyAllList(staticSubTab)} style={{ padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>📋 Copy Filtered List</button>
-            <button onClick={() => fetchStaticData(true)} disabled={loading} style={{ padding: '8px 16px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-              {loading ? "Loading..." : "🔄 Refresh Data"}
-            </button>
-          </div>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+        <input 
+          placeholder="🔍 Search Stock..." 
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)} 
+          style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 2, minWidth: '180px', fontSize: '13px', outline: 'none' }} 
+        />
+        
+        <select value={actionableFilter} onChange={(e) => setActionableFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1.5, fontSize: '13px', background: 'white', fontWeight: 'bold', color: '#166534' }}>
+          <option value="all">✅ All Stocks (Default)</option>
+          <option value="activeZones">🎯 Active Zones Only (S/R)</option>
+          <option value="confluence">🏆 Strong Confluence (2/2)</option>
+          <option value="highVolume">📈 High Volume Spike / OI</option>
+          <option value="orbBreakout">🚀 ORB Breakout (Above High)</option>
+          <option value="relativeStrength">⚡ Relative Strength (Strong Momentum)</option>
+        </select>
+
+        <select value={swingFilter} onChange={(e) => setSwingFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1.8, fontSize: '13px', background: 'white', fontWeight: 'bold', color: '#0284c7' }}>
+          <option value="all">⚡ All Setups (Default)</option>
+          <option value="nearSupport">🟢 Swing Buy: Near Support (≤ 1.5%)</option>
+          <option value="nearResistance">🔴 Swing Sell: Near Resistance (≤ 1.5%)</option>
+          <option value="exact45">🎯 Reversal Exact 45° Angle</option>
+          <option value="exact90">🎯 Reversal Exact 90° Angle</option>
+        </select>
+
+        <select value={biasFilter} onChange={(e) => setBiasFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, fontSize: '13px', background: 'white' }}>
+          <option value="all">🌐 All Trends (Bias)</option>
+          <option value="bullish">🟢 Bullish</option>
+          <option value="bearish">🔴 Bearish</option>
+          <option value="neutral">⚪ Neutral</option>
+        </select>
+
+        <select value={degreeFilter} onChange={(e) => setDegreeFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, fontSize: '13px', background: 'white' }}>
+          <option value="all">📐 All Gann Degrees</option>
+          <option value="45">🎯 Near 45°</option>
+          <option value="90">🎯 Near 90°</option>
+          <option value="180">🎯 Near 180°</option>
+          <option value="360">🎯 Near 360°</option>
+        </select>
+      </div>
+
+      <div style={{ background: staticSubTab === 'weekly' ? '#f0fdf4' : '#fef2f2', padding: '15px', borderRadius: '12px', border: `1px solid ${staticSubTab === 'weekly' ? '#bbf7d0' : '#fecaca'}` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+          <h3 style={{ color: staticSubTab === 'weekly' ? '#166534' : '#991b1b', margin: 0 }}>
+            {activeTab === 'confluence' ? '🎯 Confluence Match Stocks (Weekly + Monthly)' : activeTab === 'orbMomentum' ? '🚀 ORB Breakout & Relative Strength Stocks' : activeTab === 'watchlist' ? `⭐ Watchlist Stocks (${staticSubTab})` : `📅 ${staticSubTab === 'weekly' ? 'Weekly' : 'Monthly'} Fixed Levels`}
+          </h3>
+          <span style={{ background: staticSubTab === 'weekly' ? '#dcfce7' : '#fee2e2', color: staticSubTab === 'weekly' ? '#166534' : '#991b1b', padding: '4px 10px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px' }}>
+            Ref Date: {staticSubTab === 'weekly' ? weeklyDate : monthlyDate} | Total: {filteredData.length}
+          </span>
         </div>
-      )}
 
-      {activeTab !== 'logbook' && activeTab !== 'notifications' && (
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-          <input 
-            placeholder="🔍 Search Stock..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)} 
-            style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 2, minWidth: '180px', fontSize: '13px', outline: 'none' }} 
-          />
-          
-          <select value={actionableFilter} onChange={(e) => setActionableFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1.5, fontSize: '13px', background: 'white', fontWeight: 'bold', color: '#166534' }}>
-            <option value="all">✅ All Stocks (Default)</option>
-            <option value="activeZones">🎯 Active Zones Only (S/R)</option>
-            <option value="confluence">🏆 Strong Confluence (2/2)</option>
-            <option value="highVolume">📈 High Volume Spike / OI</option>
-            <option value="orbBreakout">🚀 ORB Breakout (Above High)</option>
-            <option value="relativeStrength">⚡ Relative Strength (Strong Momentum)</option>
-          </select>
+        <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead>
+              <tr style={{ background: staticSubTab === 'weekly' ? '#dcfce7' : '#fee2e2', color: staticSubTab === 'weekly' ? '#166534' : '#991b1b' }}>
+                <th style={{ padding: '10px', textAlign: 'left' }}>⭐ / Symbol, Close & LTP</th>
+                <th style={{ padding: '10px', textAlign: 'left' }}>Support & Resistance</th>
+                <th style={{ padding: '10px', textAlign: 'left' }}>🎯 Trade Direction & Gann Levels</th>
+                <th style={{ padding: '10px', textAlign: 'center' }}>Action, Chart & Option Chain</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredData.map((item, idx) => {
+                const d = item[staticSubTab] || {};
+                const safe = getSafeValues(d.close);
+                const supportVal = d.support || safe.support;
+                const resistanceVal = d.resistance || safe.resistance;
+                const gann = d.gann || {};
+                const up = gann.up || {};
+                const down = gann.down || {};
+                const status = getMarketStatus(item.ltp, supportVal, resistanceVal);
+                const directionBox = getTradeDirectionBox(item.ltp, supportVal, resistanceVal);
+                const confluenceScore = getConfluenceScore(item);
+                const isFav = watchlist.includes(item.symbol);
+                const tvSymbol = item.symbol.includes('.') ? item.symbol : `NSE:${item.symbol}`;
+                const optionChainUrl = `https://www.nseindia.com/option-chain`;
+                const formattedClose = Number(d.close || 0).toFixed(2);
+                const mom = item.momentum || {};
 
-          <select value={swingFilter} onChange={(e) => setSwingFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1.8, fontSize: '13px', background: 'white', fontWeight: 'bold', color: '#0284c7' }}>
-            <option value="all">⚡ All Setups (Default)</option>
-            <option value="nearSupport">🟢 Swing Buy: Near Support (≤ 1.5%)</option>
-            <option value="nearResistance">🔴 Swing Sell: Near Resistance (≤ 1.5%)</option>
-            <option value="exact45">🎯 Reversal Exact 45° Angle</option>
-            <option value="exact90">🎯 Reversal Exact 90° Angle</option>
-          </select>
-
-          <select value={biasFilter} onChange={(e) => setBiasFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, fontSize: '13px', background: 'white' }}>
-            <option value="all">🌐 All Trends (Bias)</option>
-            <option value="bullish">🟢 Bullish</option>
-            <option value="bearish">🔴 Bearish</option>
-            <option value="neutral">⚪ Neutral</option>
-          </select>
-
-          <select value={degreeFilter} onChange={(e) => setDegreeFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, fontSize: '13px', background: 'white' }}>
-            <option value="all">📐 All Gann Degrees</option>
-            <option value="45">🎯 Near 45°</option>
-            <option value="90">🎯 Near 90°</option>
-            <option value="180">🎯 Near 180°</option>
-            <option value="360">🎯 Near 360°</option>
-          </select>
-        </div>
-      )}
-
-      {activeTab === 'notifications' && (
-        <div style={{ background: '#fef2f2', padding: '15px', borderRadius: '12px', border: '1px solid #fecaca' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <h3 style={{ color: '#dc2626', margin: 0 }}>🔔 Watchlist Notification History</h3>
-            <button onClick={() => { setNotifications([]); localStorage.removeItem('notification_history'); }} style={{ padding: '5px 10px', background: '#991b1b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>🗑️ Clear All</button>
-          </div>
-          {notifications.length === 0 ? <p style={{ color: '#64748b' }}>વોચલિસ્ટના સ્ટોક્સમાંથી હજી કોઈ એલર્ટ નથી.</p> : (
-            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
-                <thead>
-                  <tr style={{ background: '#fee2e2', color: '#dc2626' }}>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Date & Time</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Alert Type</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Details & LTP</th>
+                return (
+                  <tr key={idx} style={{ borderBottom: `1px solid ${staticSubTab === 'weekly' ? '#bbf7d0' : '#fecaca'}`, background: confluenceScore === 2 ? '#fefce8' : 'white' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold', verticalAlign: 'top' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button onClick={() => toggleWatchlist(item.symbol)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}>
+                          {isFav ? '⭐' : '☆'}
+                        </button>
+                        <span style={{ color: status.color, fontSize: '15px', fontWeight: 'bold' }}>{item.symbol}</span>
+                        <span>{status.symbol}</span>
+                      </div>
+                      {confluenceScore === 2 && (
+                        <div style={{ marginTop: '4px', display: 'inline-block', background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
+                          🔥 Confluence Match (2/2)
+                        </div>
+                      )}
+                      {mom.orb_high && item.ltp >= mom.orb_high && (
+                        <div style={{ marginTop: '4px', display: 'inline-block', background: '#16a34a', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
+                          🚀 ORB Breakout (High: ₹{mom.orb_high})
+                        </div>
+                      )}
+                      {mom.is_strong && (
+                        <div style={{ marginTop: '4px', display: 'inline-block', background: '#0284c7', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
+                          ⚡ Relative Strength (+0.4%)
+                        </div>
+                      )}
+                      <div style={{ color: '#64748b', marginTop: '3px', fontSize: '12px' }}>Close: ₹<b>{formattedClose}</b></div>
+                      <div style={{ color: '#1e293b', marginTop: '1px', fontSize: '13px' }}>LTP: ₹<b>{item.ltp}</b></div>
+                    </td>
+                    <td style={{ padding: '10px', verticalAlign: 'top' }}>
+                      <div style={{ color: '#166534' }}>Support: <b>₹{supportVal}</b></div>
+                      <div style={{ color: '#991b1b', marginTop: '2px' }}>Resistance: <b>₹{resistanceVal}</b></div>
+                    </td>
+                    <td style={{ padding: '10px', verticalAlign: 'top', lineHeight: '1.6' }}>
+                      <div style={{ padding: '5px 8px', background: directionBox.bg, color: directionBox.color, borderRadius: '6px', fontWeight: 'bold', display: 'inline-block', fontSize: '11px', border: `1px solid ${directionBox.color}`, marginBottom: '6px' }}>
+                        {directionBox.text}
+                      </div>
+                      <div style={{ color: '#166534', fontSize: '11px' }}>
+                        📈 <b>Up:</b> 45°: <b>₹{up.g45}</b> | 90°: <b>₹{up.g90}</b> | 180°: <b>₹{up.g180}</b> | 360°: <b>₹{up.g360}</b>
+                      </div>
+                      <div style={{ color: '#991b1b', marginTop: '2px', fontSize: '11px' }}>
+                        📉 <b>Down:</b> 45°: <b>₹{down.g45}</b> | 90°: <b>₹{down.g90}</b> | 180°: <b>₹{down.g180}</b> | 360°: <b>₹{down.g360}</b>
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'center', verticalAlign: 'middle' }}>
+                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                        <button onClick={() => {
+                          const text = `📅 Setup: ${item.symbol} (Close: ₹${formattedClose} | LTP: ₹{item.ltp})\n🟢 S: ₹{supportVal} | 🔴 R: ₹{resistanceVal}\n📈 Up 45°: ₹${up.g45} | 90°: ₹${up.g90}`;
+                          navigator.clipboard.writeText(text);
+                          alert(`📋 ${item.symbol} કૉપી થઈ ગયું છે!`);
+                        }} style={{ padding: '5px 8px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '10px', fontWeight: 'bold' }}>📋 Copy</button>
+                        <a href={`https://in.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`} target="_blank" rel="noreferrer" style={{ padding: '5px 8px', background: '#0f172a', color: 'white', textDecoration: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>📊 Chart</a>
+                        <a href={optionChainUrl} target="_blank" rel="noreferrer" style={{ padding: '5px 8px', background: '#d97706', color: 'white', textDecoration: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>🔗 Option Chain</a>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {notifications.map((n, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #fecaca' }}>
-                      <td style={{ padding: '10px', color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>{n.date}</td>
-                      <td style={{ padding: '10px', fontWeight: 'bold', color: '#991b1b' }}>{n.title}</td>
-                      <td style={{ padding: '10px' }}>{n.body}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      )}
-
-      {activeTab === 'logbook' && (
-        <div style={{ background: '#f5f3ff', padding: '15px', borderRadius: '12px', border: '1px solid #ddd6fe' }}>
-          <h3 style={{ color: '#7c3aed', marginTop: 0 }}>📖 Saved Trade Logbook</h3>
-          {tradeLog.length === 0 ? <p style={{ color: '#64748b' }}>કોઈ ટ્રેડ સેવ નથી.</p> : (
-            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', background: 'white' }}>
-                <thead>
-                  <tr style={{ background: '#ede9fe', color: '#7c3aed' }}>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Date & Time</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Symbol & Type</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>LTP & Close</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Support / Resistance</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Gann Degrees</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tradeLog.map((log, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #ddd6fe' }}>
-                      <td style={{ padding: '10px', color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>{log.date}</td>
-                      <td style={{ padding: '10px', fontWeight: 'bold' }}><div>{log.symbol}</div><div style={{ fontSize: '11px', color: '#7c3aed' }}>{log.type}</div></td>
-                      <td style={{ padding: '10px' }}>LTP: ₹<b>{log.ltp}</b><br/>Close: ₹{log.close}</td>
-                      <td style={{ padding: '10px' }}>🟢 S: ₹{log.support}<br/>🔴 R: ₹{log.resistance}</td>
-                      <td style={{ padding: '10px', fontSize: '11px', lineHeight: '1.5' }}><div style={{ color: '#166534' }}>📈 Up -> {log.gannUp}</div><div style={{ color: '#991b1b' }}>📉 Down -> {log.gannDown}</div></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab !== 'logbook' && activeTab !== 'notifications' && (
-        <div style={{ background: staticSubTab === 'weekly' ? '#f0fdf4' : '#fef2f2', padding: '15px', borderRadius: '12px', border: `1px solid ${staticSubTab === 'weekly' ? '#bbf7d0' : '#fecaca'}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
-            <h3 style={{ color: staticSubTab === 'weekly' ? '#166534' : '#991b1b', margin: 0 }}>
-              {activeTab === 'confluence' ? '🎯 Confluence Match Stocks (Weekly + Monthly)' : activeTab === 'orbMomentum' ? '🚀 ORB Breakout & Relative Strength Stocks' : activeTab === 'watchlist' ? `⭐ Watchlist Stocks (${staticSubTab})` : `📅 ${staticSubTab === 'weekly' ? 'Weekly' : 'Monthly'} Fixed Levels`}
-            </h3>
-            <span style={{ background: staticSubTab === 'weekly' ? '#dcfce7' : '#fee2e2', color: staticSubTab === 'weekly' ? '#166534' : '#991b1b', padding: '4px 10px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px' }}>
-              Ref Date: {staticSubTab === 'weekly' ? weeklyDate : monthlyDate} | Total: {filteredData.length}
-            </span>
-
-          </div>
-
-          <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-              <thead>
-                <tr style={{ background: staticSubTab === 'weekly' ? '#dcfce7' : '#fee2e2', color: staticSubTab === 'weekly' ? '#166534' : '#991b1b' }}>
-                  <th style={{ padding: '10px', textAlign: 'left' }}>⭐ / Symbol, Close & LTP</th>
-                  <th style={{ padding: '10px', textAlign: 'left' }}>Support & Resistance</th>
-                  <th style={{ padding: '10px', textAlign: 'left' }}>🎯 Trade Direction & Gann Levels</th>
-                  <th style={{ padding: '10px', textAlign: 'center' }}>Action, Chart & Option Chain</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredData.map((item, idx) => {
-                  const d = item[staticSubTab] || {};
-                  const safe = getSafeValues(d.close);
-                  const supportVal = d.support || safe.support;
-                  const resistanceVal = d.resistance || safe.resistance;
-                  const gann = d.gann || {};
-                  const up = gann.up || {};
-                  const down = gann.down || {};
-                  const status = getMarketStatus(item.ltp, supportVal, resistanceVal);
-                  const directionBox = getTradeDirectionBox(item.ltp, supportVal, resistanceVal);
-                  const confluenceScore = getConfluenceScore(item);
-                  const isFav = watchlist.includes(item.symbol);
-                  const tvSymbol = item.symbol.includes('.') ? item.symbol : `NSE:${item.symbol}`;
-                  const optionChainUrl = `https://www.nseindia.com/option-chain`;
-                  const formattedClose = Number(d.close || 0).toFixed(2);
-                  const mom = item.momentum || {};
-
-                  return (
-                    <tr key={idx} style={{ borderBottom: `1px solid ${staticSubTab === 'weekly' ? '#bbf7d0' : '#fecaca'}`, background: confluenceScore === 2 ? '#fefce8' : 'white' }}>
-                      <td style={{ padding: '10px', fontWeight: 'bold', verticalAlign: 'top' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <button onClick={() => toggleWatchlist(item.symbol)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}>
-                            {isFav ? '⭐' : '☆'}
-                          </button>
-                          <span style={{ color: status.color, fontSize: '15px', fontWeight: 'bold' }}>{item.symbol}</span>
-                          <span>{status.symbol}</span>
-                        </div>
-                        {confluenceScore === 2 && (
-                          <div style={{ marginTop: '4px', display: 'inline-block', background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
-                            🔥 Confluence Match (2/2)
-                          </div>
-                        )}
-                        {mom.orb_high && item.ltp >= mom.orb_high && (
-                          <div style={{ marginTop: '4px', display: 'inline-block', background: '#16a34a', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
-                            🚀 ORB Breakout (High: ₹{mom.orb_high})
-                          </div>
-                        )}
-                        {mom.is_strong && (
-                          <div style={{ marginTop: '4px', display: 'inline-block', background: '#0284c7', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
-                            ⚡ Relative Strength (+0.4%)
-                          </div>
-                        )}
-                        <div style={{ color: '#64748b', marginTop: '3px', fontSize: '12px' }}>Close: ₹<b>{formattedClose}</b></div>
-                        <div style={{ color: '#1e293b', marginTop: '1px', fontSize: '13px' }}>LTP: ₹<b>{item.ltp}</b></div>
-                      </td>
-                      <td style={{ padding: '10px', verticalAlign: 'top' }}>
-                        <div style={{ color: '#166534' }}>Support: <b>₹{supportVal}</b></div>
-                        <div style={{ color: '#991b1b', marginTop: '2px' }}>Resistance: <b>₹{resistanceVal}</b></div>
-                      </td>
-                      <td style={{ padding: '10px', verticalAlign: 'top', lineHeight: '1.6' }}>
-                        <div style={{ padding: '5px 8px', background: directionBox.bg, color: directionBox.color, borderRadius: '6px', fontWeight: 'bold', display: 'inline-block', fontSize: '11px', border: `1px solid ${directionBox.color}`, marginBottom: '6px' }}>
-                          {directionBox.text}
-                        </div>
-                        <div style={{ color: '#166534', fontSize: '11px' }}>
-                          📈 <b>Up:</b> 45°: <b>₹{up.g45}</b> | 90°: <b>₹{up.g90}</b> | 180°: <b>₹{up.g180}</b> | 360°: <b>₹{up.g360}</b>
-                        </div>
-                        <div style={{ color: '#991b1b', marginTop: '2px', fontSize: '11px' }}>
-                          📉 <b>Down:</b> 45°: <b>₹{down.g45}</b> | 90°: <b>₹{down.g90}</b> | 180°: <b>₹{down.g180}</b> | 360°: <b>₹{down.g360}</b>
-                        </div>
-                      </td>
-                      <td style={{ padding: '10px', textAlign: 'center', verticalAlign: 'middle' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                          <button onClick={() => addToLogbook(item, d, supportVal, resistanceVal)} style={{ padding: '5px 8px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '10px', fontWeight: 'bold' }}>📝 Log</button>
-                          <button onClick={() => {
-                            const text = `📅 Setup: ${item.symbol} (Close: ₹${formattedClose} | LTP: ₹${item.ltp})\n🟢 S: ₹{supportVal} | 🔴 R: ₹{resistanceVal}\n📈 Up 45°: ₹${up.g45} | 90°: ₹${up.g90}`;
-                            navigator.clipboard.writeText(text);
-                            alert(`📋 ${item.symbol} કૉપી થઈ ગયું છે!`);
-                          }} style={{ padding: '5px 8px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '10px', fontWeight: 'bold' }}>📋 Copy</button>
-                          <a href={`https://in.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`} target="_blank" rel="noreferrer" style={{ padding: '5px 8px', background: '#0f172a', color: 'white', textDecoration: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>📊 Chart</a>
-                          <a href={optionChainUrl} target="_blank" rel="noreferrer" style={{ padding: '5px 8px', background: '#d97706', color: 'white', textDecoration: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>🔗 Option Chain</a>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      </div>
 
     </div>
   );

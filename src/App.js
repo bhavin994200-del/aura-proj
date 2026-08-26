@@ -59,8 +59,10 @@ function App() {
   useEffect(() => {
     const fetchGlobalLiveData = async () => {
       try {
-        // આખું F&O લિસ્ટ અથવા હોમ ડેશબોર્ડના સિમ્બોલ્સ બેકએન્ડમાં મોકલીને લાઈવ ડેટા ખેંચી લાવશે
-        const symbolsToFetch = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK'];
+        // 🔥 હવે માત્ર 8 સ્ટોક્સ નહીં, પણ આખું F&O લિસ્ટ અથવા હોમ ડેશબોર્ડના મુખ્ય સિમ્બોલ્સ મોકલશે
+        const homeSymbols = marketData.map(item => item.name);
+        const symbolsToFetch = Array.from(new Set(['NIFTY', 'BANKNIFTY', 'SENSEX', ...homeSymbols, ...fullFnoList.slice(0, 40)]));
+
         const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

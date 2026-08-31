@@ -124,7 +124,6 @@ function OpenPrice() {
         const currentTime = Date.now();
 
         setMarketData(prevList => {
-          // જો પહેલીવાર માર્કેટ ડેટા આવ્યો હોય તો પ્રીવિયસ લિસ્ટ તરીકે નવું લિસ્ટ વાપરો
           const baseList = prevList.length > 0 ? prevList : updatedList;
 
           return baseList.map(oldItem => {
@@ -134,14 +133,13 @@ function OpenPrice() {
             const oldStatus = oldItem.status; 
             const newStatus = found.status;
 
-            // જો અગાઉ RANGE હતું અને હવે વાસ્તવમાં BUY કે SELL થયું, તો જ નવો ટ્રીગર ગણવો
+            // જો અગાઉ RANGE હતું અને હવે વાસ્તવમાં BUY કે SELL થયું, તો જ નવો ટ્રિગર ગણવો
             if (!isInitialMount.current && oldStatus === 'RANGE' && (newStatus === 'BUY' || newStatus === 'SELL')) {
               playBeepSound(newStatus);
               hasNewTrigger = true;
               
               const triggerPriceVal = newStatus === 'BUY' ? found.buyLvl : found.sellLvl;
 
-              // ડુપ્લીકેટ એન્ટ્રી ન પડે તેની ખાતરી કરવા માટે ચેક કરો
               const alreadyExists = newLogs.some(log => log.symbol === found.symbol);
               if (!alreadyExists) {
                 newLogs.unshift({
@@ -165,15 +163,13 @@ function OpenPrice() {
               };
             }
 
-            // જો પહેલેથી BUY કે SELL થઈ ગયેલું હોય, તો સ્ટેટ બદલાવું ન જોઈએ (Lock રહેવું જોઈએ)
             if (oldStatus === 'BUY' || oldStatus === 'SELL') {
               return {
                 ...oldItem,
-                ltp: found.ltp // માત્ર લાઈવ LTP જ ફરશે
+                ltp: found.ltp
               };
             }
 
-            // બાકીના કેસમાં સામાન્ય અપડેટ
             return {
               ...oldItem,
               ltp: found.ltp,
@@ -200,12 +196,11 @@ function OpenPrice() {
 
   useEffect(() => {
     fetchAllOpenPrices();
-    // દર 10 સેકન્ડે ફક્ત LTP અને વાસ્તવિક ક્રોસઓવર ચેક થશે
     const interval = setInterval(updateLiveLtpOnly, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // સોર્ટિંગ લૉજિક: જે સૌથી પહેલા BUY કે SELL થશે તે સૌથી ઉપર આવશે, પછી નવા આવતા જશે.
+  // માત્ર ટાઇમસ્ટેમ્પ મુજબ શોર્ટીંગ (A-Z વગર) - નવું ટ્રીગર હંમેશા સૌથી ઉપર
   const filteredList = marketData
     .filter(item => {
       const matchesSearch = item.symbol.toLowerCase().includes(searchTerm.toLowerCase());
@@ -213,20 +208,9 @@ function OpenPrice() {
       return matchesSearch && item.status === filterType;
     })
     .sort((a, b) => {
-      const getPriority = (status) => {
-        if (status === 'BUY') return 1;
-        if (status === 'SELL') return 2;
-        return 3; // RANGE વાળા સૌથી નીચે
-      };
-      
-      const pA = getPriority(a.status);
-      const pB = getPriority(b.status);
-
-      if (pA !== pB) {
-        return pA - pB; 
-      }
-
-      return (b.triggeredAt || 0) - (a.triggeredAt || 0);
+      const timeA = a.triggeredAt || 0;
+      const timeB = b.triggeredAt || 0;
+      return timeB - timeA;
     });
 
   const buyCount = marketData.filter(i => i.status === 'BUY').length;
@@ -252,7 +236,7 @@ function OpenPrice() {
         </div>
       </div>
 
-      {/* OpenPrice ટેબની અંદર જ બનેલી Live Trigger Book Section */}
+      {/* Live Trigger Book Section */}
       <div style={{ marginBottom: '20px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h4 style={{ margin: 0, color: '#1e293b', fontSize: '14px' }}>📖 OpenPrice Live Trigger Book ({tradeBookLog.length})</h4>

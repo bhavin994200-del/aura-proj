@@ -200,7 +200,7 @@ function OpenPrice() {
     return () => clearInterval(interval);
   }, []);
 
-  // માત્ર ટાઇમસ્ટેમ્પ મુજબ શોર્ટીંગ (A-Z વગર) - નવું ટ્રીગર હંમેશા સૌથી ઉપર
+  // માત્ર ટાઇમસ્ટેમ્પ મુજબ શોર્ટીંગ - નવું ટ્રીગર હંમેશા સૌથી ઉપર
   const filteredList = marketData
     .filter(item => {
       const matchesSearch = item.symbol.toLowerCase().includes(searchTerm.toLowerCase());
@@ -370,7 +370,21 @@ function OpenPrice() {
                 return (
                   <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 === 0 ? '#f8fafc' : 'white' }}>
                     <td style={{ padding: '12px', fontWeight: 'bold', color: '#1e293b' }}>{item.symbol}</td>
-                    <td style={{ padding: '12px', fontWeight: 'bold', color: '#475569' }}>₹{item.open}</td>
+                    
+                    {/* Open Price અને તેની નીચે Trigger Time */}
+                    <td style={{ padding: '12px' }}>
+                      <div style={{ fontWeight: 'bold', color: '#475569' }}>₹{item.open}</div>
+                      {item.triggeredAt ? (
+                        <div style={{ fontSize: '10px', color: '#0284c7', fontWeight: 'bold', marginTop: '2px' }}>
+                          🕒 {new Date(item.triggeredAt).toLocaleTimeString()}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
+                          ⏳ In Range
+                        </div>
+                      )}
+                    </td>
+
                     <td style={{ padding: '12px', fontWeight: 'bold', color: '#0f172a' }}>₹{item.ltp}</td>
                     <td style={{ padding: '12px' }}>
                       <span style={{ padding: '4px 8px', background: badgeBg, color: badgeColor, borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', border: `1px solid ${badgeColor}` }}>

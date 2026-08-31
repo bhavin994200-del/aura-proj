@@ -75,7 +75,7 @@ function OpenPrice() {
       const fetchedData = json.data || [];
       const timeStr = new Date().toLocaleTimeString();
 
-      // જો પહેલેથી લોકલ સ્ટોરેજમાં ડેટા હોય તો ટ્રિગર સ્ટેટ જાળવી રાખો
+      // જો પહેલેથી લોકલ સ્ટોરેજમાં ડેટા હોય તો ટ્રિગર સ્ટેટ અને triggeredAt જાળવી રાખો
       setMarketData(prevList => {
         if (prevList.length === 0) return fetchedData;
         return fetchedData.map(newItem => {
@@ -106,7 +106,7 @@ function OpenPrice() {
     setLoading(false);
   };
 
-  // ફક્ત લાઈવ LTP અને વાસ્તવિક ક્રોસઓવર અપડેટ કરવા માટેનું ફંક્શન
+  // ફક્ત લાઈવ LTP અને વાસ્તવિક ક્રોસઓવર અપડેટ કરવા માટેનું ફંક્શન (ટાઈમ અને લોકલ સ્ટોરેજ ફિક્સ સાથે)
   const updateLiveLtpOnly = async () => {
     try {
       const res = await fetch('https://aura-proj.onrender.com/scan-open-price', {
@@ -122,11 +122,13 @@ function OpenPrice() {
         let hasNewTrigger = false;
         const timeStr = new Date().toLocaleTimeString();
         const currentTime = Date.now();
+        
+        let updatedState = [];
 
         setMarketData(prevList => {
           const baseList = prevList.length > 0 ? prevList : updatedList;
 
-          return baseList.map(oldItem => {
+          updatedState = baseList.map(oldItem => {
             const found = updatedList.find(newItem => newItem.symbol === oldItem.symbol);
             if (!found) return oldItem;
 
@@ -166,7 +168,8 @@ function OpenPrice() {
             if (oldStatus === 'BUY' || oldStatus === 'SELL') {
               return {
                 ...oldItem,
-                ltp: found.ltp
+                ltp: found.ltp,
+                triggeredAt: oldItem.triggeredAt // જૂનો ટ્રીગર ટાઇમ જાળવી રાખો
               };
             }
 
@@ -179,7 +182,14 @@ function OpenPrice() {
               statusText: found.statusText
             };
           });
+
+          return updatedState;
         });
+
+        // લાઈવ ડેટા અને ટાઇમ લોકલ સ્ટોરેજમાં સેવ કરો જેથી રિફ્રેશ કરવાથી ટાઈમ ફિક્સ રહે
+        if (updatedState.length > 0) {
+          localStorage.setItem('vedicedge_openprice_data', JSON.stringify(updatedState));
+        }
 
         if (hasNewTrigger) {
           setTradeBookLog(newLogs);
@@ -187,6 +197,7 @@ function OpenPrice() {
         }
 
         setLastUpdated(timeStr);
+        localStorage.setItem('vedicedge_openprice_time', timeStr);
         isInitialMount.current = false;
       }
     } catch (err) {

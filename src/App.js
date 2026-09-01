@@ -4,6 +4,7 @@ import BiasCalendar from './BiasCalendar';
 import StaticPivotScanner from './StaticPivotScanner';
 import CalculatorModule from './Calculator';
 import OpenPrice from './OpenPrice';
+import VcpScanner from './VcpScanner'; // 👈 નવું VcpScanner ઇમ્પોર્ટ કર્યું
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -176,6 +177,7 @@ function App() {
           <button onClick={() => setActiveTab('home')} style={btnStyle(activeTab === 'home')}>Home Dashboard</button>
           <button onClick={() => setActiveTab('openPrice')} style={btnStyle(activeTab === 'openPrice')}>🚀 OpenPrice</button>
           <button onClick={() => setActiveTab('scanner')} style={btnStyle(activeTab === 'scanner')}>Static Scanner</button>
+          <button onClick={() => setActiveTab('vcpScanner')} style={btnStyle(activeTab === 'vcpScanner')}>🎯 VCP Scanner</button> {/* 👈 સાઈડબાર બટન */}
           <button onClick={() => setActiveTab('biasCalendar')} style={btnStyle(activeTab === 'biasCalendar')}>Bias Calendar</button>
           <button onClick={() => setActiveTab('calculator')} style={btnStyle(activeTab === 'calculator')}>Calculator</button>
         </div>
@@ -220,6 +222,7 @@ function App() {
           {activeTab === 'home' && <HomeDashboard marketData={marketData} setMarketData={setMarketData} />}
           {activeTab === 'openPrice' && <OpenPrice />}
           {activeTab === 'scanner' && <StaticPivotScanner />}
+          {activeTab === 'vcpScanner' && <VcpScanner />} {/* 👈 રેન્ડરિંગ વ્યુ */}
           {activeTab === 'biasCalendar' && <BiasCalendar />}
           {activeTab === 'calculator' && <CalculatorModule />}
         </div>
@@ -394,7 +397,6 @@ function HomeDashboard({ marketData, setMarketData }) {
               const hRoot = Math.sqrt(item.high || item.ltp);
               const lRoot = Math.sqrt(item.low || item.ltp);
               
-              // 👈 સપોર્ટ હંમેશાં નીચે અને રેઝિસ્ટન્સ ઉપર રહે તે માટે સચોટ ગણતરી
               const supVal = Math.pow(hRoot - (90 / 180.0), 2);
               const resVal = Math.pow(lRoot + (90 / 180.0), 2);
               const support90 = Math.min(supVal, resVal).toFixed(2);

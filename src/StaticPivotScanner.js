@@ -9,7 +9,6 @@ function StaticPivotScanner() {
   const [degreeFilter, setDegreeFilter] = useState('all'); 
   const [swingFilter, setSwingFilter] = useState('all'); 
   
-  // 👈 મલ્ટી-સિલેક્ટ ફિલ્ટર્સ માટેનું સ્ટેટ (એકસાથે બહુધા ઓપ્શન્સ સિલેક્ટ કરવા માટે)
   const [selectedActionables, setSelectedActionables] = useState([]); 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -24,7 +23,6 @@ function StaticPivotScanner() {
   const dataFetchedRef = useRef(false);
   const dropdownRef = useRef(null);
 
-  // ડ્રોપડાઉનની બહાર ક્લિક કરીએ તો મેનુ બંધ થઈ જાય તે માટે
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -34,6 +32,32 @@ function StaticPivotScanner() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // 👈 ડેશબોર્ડ અને સ્કેનર બંનેના LTP એકસરખા કરવા માટે માસ્ટર કેશ મર્જ ફંક્શન
+  const getMergedLiveData = (apiData) => {
+    try {
+      const masterCache = localStorage.getItem('master_cached_market_data');
+      if (masterCache) {
+        const liveList = JSON.parse(masterCache);
+        if (Array.isArray(liveList) && liveList.length > 0) {
+          return apiData.map(item => {
+            const found = liveList.find(i => (i.symbol === item.symbol || i.name === item.symbol));
+            if (found && (found.ltp || found.close)) {
+              return {
+                ...item,
+                ltp: found.ltp || found.close,
+                weekly: item.weekly ? { ...item.weekly, support: found.weekly?.support || item.weekly.support, resistance: found.weekly?.resistance || item.weekly.resistance } : item.weekly
+              };
+            }
+            return item;
+          });
+        }
+      }
+    } catch (e) {
+      console.log("Error merging master cache LTP");
+    }
+    return apiData;
+  };
 
   const fetchStaticData = async (isManual = false) => {
     if (!isManual && staticData.length > 0) return;
@@ -45,9 +69,12 @@ function StaticPivotScanner() {
         body: JSON.stringify({ symbols: fullFnoList })
       });
       const json = await res.json();
-      const fetchedData = json.data || [];
+      let fetchedData = json.data || [];
       const wDate = json.weekly_date || '';
       const mDate = json.monthly_date || '';
+
+      // 👈 ડેશબોર્ડ સાથે સિંક કરવા માટે LTP અપડેટ કરો
+      fetchedData = getMergedLiveData(fetchedData);
 
       setStaticData(fetchedData);
       setWeeklyDate(wDate);
@@ -70,7 +97,11 @@ function StaticPivotScanner() {
     const cachedWeekly = localStorage.getItem('cached_weekly_date');
     const cachedMonthly = localStorage.getItem('cached_monthly_date');
 
-    if (cachedData) setStaticData(JSON.parse(cachedData));
+    if (cachedData) {
+      let parsed = JSON.parse(cachedData);
+      parsed = getMergedLiveData(parsed); // 👈 કેશ ડેટા પણ ડેશબોર્ડ સાથે મર્જ કરો
+      setStaticData(parsed);
+    }
     if (cachedTime) setLastRefreshTime(cachedTime);
     if (cachedWeekly) setWeeklyDate(cachedWeekly);
     if (cachedMonthly) setMonthlyDate(cachedMonthly);
@@ -80,7 +111,7 @@ function StaticPivotScanner() {
       fetchStaticData(true);
     }
 
-    const interval = setInterval(() => { fetchStaticData(true); }, 10000); 
+    const interval = setInterval(() => { fetchStaticData(true); }, 5000); // 👈 5 સેકન્ડમાં ઓટો રિફ્રેશ
 
     const savedWatch = localStorage.getItem('my_watchlist');
     if (savedWatch) setWatchlist(JSON.parse(savedWatch));
@@ -223,7 +254,6 @@ function StaticPivotScanner() {
     const matchesDeg = matchesDegree(item.ltp, d.gann);
     const matchesSwg = matchesSwing(item.ltp, supportVal, resistanceVal, d.gann);
 
-    // 👈 મલ્ટી-સિલેક્ટ ચેકબોક્સ ફિલ્ટર લોજિક
     let matchesActionable = true;
     if (selectedActionables.length > 0) {
       matchesActionable = selectedActionables.some(filterType => {
@@ -325,7 +355,6 @@ function StaticPivotScanner() {
           style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 2, minWidth: '180px', fontSize: '13px', outline: 'none' }} 
         />
         
-        {/* 👇 કસ્ટમ મલ્ટી-સિલેક્ટ ચેકબોક્સ ડ્રોપડાઉન */}
         <div style={{ flex: 1.5, position: 'relative' }} ref={dropdownRef}>
           <div 
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}

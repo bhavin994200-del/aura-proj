@@ -78,7 +78,6 @@ function StaticPivotScanner() {
       setWeeklyDate(wDate);
       setMonthlyDate(mDate);
       
-      // 👈 હવે બેકગ્રાઉન્ડ સિન્ક વખતે પણ Last Refresh Time એકદમ લાઈવ અપડેટ થશે
       const currentTime = new Date().toLocaleTimeString();
       setLastRefreshTime(currentTime);
       localStorage.setItem('last_refresh_time', currentTime);
@@ -111,6 +110,9 @@ function StaticPivotScanner() {
 
     const interval = setInterval(() => { 
       fetchStaticData(false); 
+      const liveTime = new Date().toLocaleTimeString();
+      setLastRefreshTime(liveTime);
+      localStorage.setItem('last_refresh_time', liveTime);
     }, 5000); 
 
     const savedWatch = localStorage.getItem('my_watchlist');
@@ -125,6 +127,7 @@ function StaticPivotScanner() {
     localStorage.setItem('my_watchlist', JSON.stringify(updated));
   };
 
+  // 👈 સપોર્ટ હંમેશાં નીચે (માઇનસ) અને રેઝિસ્ટન્સ ઉપર (પ્લસ) સચોટ રીતે ગોઠવ્યા છે
   const getSafeValues = (closePrice) => {
     if (!closePrice) return { support: 0, resistance: 0 };
     const r = Math.sqrt(closePrice);

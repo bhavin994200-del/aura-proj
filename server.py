@@ -203,18 +203,18 @@ async def telegram_bot_listener():
                     ' નામ લખો.'
                 )
 
-            send_url = (
-                f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
-            )
-            requests.post(
-                send_url,
-                json={
-                    'chat_id': chat_id,
-                    'text': reply,
-                    'parse_mode': 'Markdown',
-                },
-                timeout=5,
-            )
+              send_url = (
+                  f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
+              )
+              requests.post(
+                  send_url,
+                  json={
+                      'chat_id': chat_id,
+                      'text': reply,
+                      'parse_mode': 'Markdown',
+                  },
+                  timeout=5,
+              )
     except Exception as e:
       print(f'Bot Listener Error: {e}')
     await asyncio.sleep(2)
@@ -248,7 +248,6 @@ async def websocket_endpoint(websocket: WebSocket):
   await manager.connect(websocket)
   try:
     while True:
-      # Static pivot scanner data format as live payload
       res_data = await scan_static_pivot(Request(scope={'type': 'http'}))
       await websocket.send_json(res_data)
       await asyncio.sleep(5)
@@ -415,13 +414,17 @@ async def calculate_stock(item: dict):
 
   try:
     spot_ticker = yf.Ticker(spot_ticker_str)
-    todays_data = spot_ticker.history(period='1d')
+    todays_data = spot_ticker.history(period='2d')
 
     if not todays_data.empty:
       ltp = float(todays_data['Close'].iloc[-1])
       high = float(todays_data['High'].iloc[-1])
       low = float(todays_data['Low'].iloc[-1])
-      prev_close = float(spot_ticker.info.get('previousClose', ltp))
+      prev_close = (
+          float(todays_data['Close'].iloc[-2])
+          if len(todays_data) > 1
+          else ltp
+      )
   except Exception:
     pass
 
@@ -636,40 +639,10 @@ async def scan_static_pivot(req: Request):
 
       ticker = yf.Ticker(t_str)
 
-      # 🔥 લાઈવ LTP ફાસ્ટ ફેચ કરવા માટે સુધારેલું લોજિક
-      try:
-        ltp = float(ticker.fast_info.get('lastPrice', 0))
-        if ltp == 0:
-          todays_intraday = ticker.history(period='1d')
-          if not todays_intraday.empty:
-            ltp = float(todays_intraday['Close'].iloc[-1])
-      except:
-        todays_intraday = ticker.history(period='1d', interval='5m')
-        if not todays_intraday.empty:
-          ltp = float(todays_intraday['Close'].iloc[-1])
-
-      todays_intraday_vol = ticker.history(period='1d', interval='5m')
-      if not todays_intraday_vol.empty:
-        if len(todays_intraday_vol) >= 3:
-          morning_session = todays_intraday_vol.iloc[:3]
-          orb_high = float(morning_session['High'].max())
-          orb_low = float(morning_session['Low'].min())
-
-        curr_vol = (
-            float(todays_intraday_vol['Volume'].iloc[-1])
-            if 'Volume' in todays_intraday_vol.columns
-            else 0
-        )
-        avg_vol = (
-            float(todays_intraday_vol['Volume'].mean())
-            if 'Volume' in todays_intraday_vol.columns
-            else 1
-        )
-        if avg_vol > 0 and curr_vol > (avg_vol * 1.3):
-          volume_spike = True
-
+      # 🔥 લાઈવ LTP અને પ્રિવિયસ ક્લોઝ સચોટ મેળવવા માટે 2 દિવસનો હિસ્ટ્રી ડેટા
       hist_data = ticker.history(period='1y')
-      if not hist_data.empty and len(hist_data) > 5:
+      if not hist_data.empty:
+        ltp = float(hist_data['Close'].iloc[-1])
         prev_close_val = (
             float(hist_data['Close'].iloc[-2]) if len(hist_data) > 1 else ltp
         )
@@ -695,6 +668,27 @@ async def scan_static_pivot(req: Request):
       else:
         weekly_close = ltp
         monthly_close = ltp
+
+      # Intraday data for ORB and Volume
+      todays_intraday_vol = ticker.history(period='1d', interval='5m')
+      if not todays_intraday_vol.empty:
+        if len(todays_intraday_vol) >= 3:
+          morning_session = todays_intraday_vol.iloc[:3]
+          orb_high = float(morning_session['High'].max())
+          orb_low = float(morning_session['Low'].min())
+
+        curr_vol = (
+            float(todays_intraday_vol['Volume'].iloc[-1])
+            if 'Volume' in todays_intraday_vol.columns
+            else 0
+        )
+        avg_vol = (
+            float(todays_intraday_vol['Volume'].mean())
+            if 'Volume' in todays_intraday_vol.columns
+            else 1
+        )
+        if avg_vol > 0 and curr_vol > (avg_vol * 1.3):
+          volume_spike = True
 
     except Exception as e:
       ltp = 0.0
@@ -751,6 +745,7 @@ async def scan_static_pivot(req: Request):
         'symbol': sym,
         'ltp': round(ltp, 2),
         'volume_spike': volume_spike,
+        'prev_close': round(prev_close_val, 2) if 'prev_close_val' in locals() else round(ltp, 2),
         'pcr': pcr_value,
         'momentum': {
             'orb_high': round(orb_high, 2),
@@ -806,7 +801,6 @@ async def scan_static_pivot(req: Request):
   }
 
 
-# 🔥 સર્વર સ્ટાર્ટ કરવા માટેનો પરફેક્ટ કોડ (ફાઇલની સૌથી છેલ્લે)
 if __name__ == '__main__':
   import uvicorn
 

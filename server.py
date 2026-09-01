@@ -77,7 +77,7 @@ async def telegram_bot_listener():
             if text == '/START':
               reply = (
                   '👋 સ્વાગત છે Aura Terminal માં!\nગમે તે સ્ટોક કે ઇન્ડેક્સનું'
-                  ' નામ લખો (દા.ત. `RELIANCE`, `NIFTY`), એટલે હું તમને તેના'
+                  ' નામ લખો (દા.ત. `RELIANCE`, `NIFTY`), એટલે હું તેના'
                   ' **OpenPrice** અને **Weekly/Monthly All Gann Degrees** મોકલી'
                   ' આપીશ.'
               )
@@ -636,22 +636,33 @@ async def scan_static_pivot(req: Request):
 
       ticker = yf.Ticker(t_str)
 
-      todays_intraday = ticker.history(period='1d', interval='5m')
-      if not todays_intraday.empty:
-        ltp = float(todays_intraday['Close'].iloc[-1])
-        if len(todays_intraday) >= 3:
-          morning_session = todays_intraday.iloc[:3]
+      # 🔥 લાઈવ LTP ફાસ્ટ ફેચ કરવા માટે સુધારેલું લોજિક
+      try:
+        ltp = float(ticker.fast_info.get('lastPrice', 0))
+        if ltp == 0:
+          todays_intraday = ticker.history(period='1d')
+          if not todays_intraday.empty:
+            ltp = float(todays_intraday['Close'].iloc[-1])
+      except:
+        todays_intraday = ticker.history(period='1d', interval='5m')
+        if not todays_intraday.empty:
+          ltp = float(todays_intraday['Close'].iloc[-1])
+
+      todays_intraday_vol = ticker.history(period='1d', interval='5m')
+      if not todays_intraday_vol.empty:
+        if len(todays_intraday_vol) >= 3:
+          morning_session = todays_intraday_vol.iloc[:3]
           orb_high = float(morning_session['High'].max())
           orb_low = float(morning_session['Low'].min())
 
         curr_vol = (
-            float(todays_intraday['Volume'].iloc[-1])
-            if 'Volume' in todays_intraday.columns
+            float(todays_intraday_vol['Volume'].iloc[-1])
+            if 'Volume' in todays_intraday_vol.columns
             else 0
         )
         avg_vol = (
-            float(todays_intraday['Volume'].mean())
-            if 'Volume' in todays_intraday.columns
+            float(todays_intraday_vol['Volume'].mean())
+            if 'Volume' in todays_intraday_vol.columns
             else 1
         )
         if avg_vol > 0 and curr_vol > (avg_vol * 1.3):

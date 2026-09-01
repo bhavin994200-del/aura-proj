@@ -26,6 +26,12 @@ TELEGRAM_CHAT_ID = '6778191879'
 last_telegram_alerts = {}
 
 
+# 🔥 Cron-job પિંગ એરર દૂર કરવા માટેનો લાઈટવેઇટ રૂટ
+@app.get('/ping')
+async def ping_server():
+    return {'status': 'alive'}, 200
+
+
 def send_telegram_alert(symbol, message):
   if not TELEGRAM_BOT_TOKEN:
     return
@@ -787,3 +793,10 @@ async def scan_static_pivot(req: Request):
       'india_vix': round(india_vix, 2),
       'data': data,
   }
+
+
+# 🔥 સર્વર સ્ટાર્ટ કરવા માટેનો પરફેક્ટ કોડ (ફાઇલની સૌથી છેલ્લે)
+if __name__ == '__main__':
+  import uvicorn
+
+  uvicorn.run('server:app', host='0.0.0.0', port=5000, reload=True)

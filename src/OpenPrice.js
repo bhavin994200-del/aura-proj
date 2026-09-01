@@ -106,7 +106,7 @@ function OpenPrice() {
     setLoading(false);
   };
 
-  // ફક્ત લાઈવ LTP અને વાસ્તવિક ક્રોસઓવર અપડેટ કરવા માટેનું ફંક્શન (ટાઈમ અને લોકલ સ્ટોરેજ ફિક્સ સાથે)
+  // ફક્ત લાઈવ LTP અને વાસ્તવિક ક્રોસઓવર અપડેટ કરવા માટેનું ફંક્શન
   const updateLiveLtpOnly = async () => {
     try {
       const res = await fetch('https://aura-proj.onrender.com/scan-open-price', {
@@ -169,7 +169,7 @@ function OpenPrice() {
               return {
                 ...oldItem,
                 ltp: found.ltp,
-                triggeredAt: oldItem.triggeredAt // જૂનો ટ્રીગર ટાઇમ જાળવી રાખો
+                triggeredAt: oldItem.triggeredAt
               };
             }
 
@@ -186,7 +186,6 @@ function OpenPrice() {
           return updatedState;
         });
 
-        // લાઈવ ડેટા અને ટાઇમ લોકલ સ્ટોરેજમાં સેવ કરો જેથી રિફ્રેશ કરવાથી ટાઈમ ફિક્સ રહે
         if (updatedState.length > 0) {
           localStorage.setItem('vedicedge_openprice_data', JSON.stringify(updatedState));
         }
@@ -196,6 +195,7 @@ function OpenPrice() {
           localStorage.setItem('vedicedge_openprice_tradebook', JSON.stringify(newLogs));
         }
 
+        // 👈 લાઈવ ટાઈમ દર 5 સેકન્ડે અપડેટ થશે
         setLastUpdated(timeStr);
         localStorage.setItem('vedicedge_openprice_time', timeStr);
         isInitialMount.current = false;
@@ -207,11 +207,10 @@ function OpenPrice() {
 
   useEffect(() => {
     fetchAllOpenPrices();
-    const interval = setInterval(updateLiveLtpOnly, 10000);
+    const interval = setInterval(updateLiveLtpOnly, 5000); // 👈 5 સેકન્ડનો લાઈવ રિફ્રેશ ટાઈમર
     return () => clearInterval(interval);
   }, []);
 
-  // માત્ર ટાઇમસ્ટેમ્પ મુજબ શોર્ટીંગ - નવું ટ્રીગર હંમેશા સૌથી ઉપર
   const filteredList = marketData
     .filter(item => {
       const matchesSearch = item.symbol.toLowerCase().includes(searchTerm.toLowerCase());
@@ -374,15 +373,14 @@ function OpenPrice() {
                 }
 
                 const tvSymbol = item.symbol === 'NIFTY' ? 'NSE:NIFTY' : 
-                                   item.symbol === 'BANKNIFTY' ? 'NSE:BANKNIFTY' : 
-                                   item.symbol === 'SENSEX' ? 'BSE:SENSEX' : `NSE:${item.symbol}`;
+                                 item.symbol === 'BANKNIFTY' ? 'NSE:BANKNIFTY' : 
+                                 item.symbol === 'SENSEX' ? 'BSE:SENSEX' : `NSE:${item.symbol}`;
                 const tvUrl = `https://in.tradingview.com/chart/?symbol=${tvSymbol}`;
 
                 return (
                   <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 === 0 ? '#f8fafc' : 'white' }}>
                     <td style={{ padding: '12px', fontWeight: 'bold', color: '#1e293b' }}>{item.symbol}</td>
                     
-                    {/* Open Price અને તેની નીચે Trigger Time */}
                     <td style={{ padding: '12px' }}>
                       <div style={{ fontWeight: 'bold', color: '#475569' }}>₹{item.open}</div>
                       {item.triggeredAt ? (

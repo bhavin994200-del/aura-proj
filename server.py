@@ -9,8 +9,8 @@ import requests
 import swisseph as swe
 import yfinance as yf
 
-# 👇 VCP સ્કેનર અને લિસ્ટ ઇમ્પોર્ટ કર્યા
-from confluenceVcpScanner import scan_confluence_vcp
+# 👇 ફાસ્ટ મલ્ટિથ્રેડેડ VCP સ્કેનર અને લિસ્ટ ઇમ્પોર્ટ કર્યા
+from confluenceVcpScanner import scan_all_vcp
 from watchlistData import fullFnoList
 
 warnings.filterwarnings('ignore')
@@ -579,7 +579,7 @@ async def scan_open_price(item: dict):
   return {'data': data}
 
 
-# 🔥 VCP Confluence Strategy Scanner API Endpoint
+# 🔥 VCP Confluence Strategy Scanner API Endpoint (Fast Multithreaded)
 @app.post('/scan-vcp')
 async def scan_vcp_endpoint(req: Request):
   try:
@@ -588,16 +588,11 @@ async def scan_vcp_endpoint(req: Request):
   except:
     capital = 500000.0
 
-  results = []
-  for stock in fullFnoList:
-    try:
-      res = scan_confluence_vcp(stock, account_capital=capital, risk_pct=0.01)
-      if res and isinstance(res, dict) and res.get('Signal Triggered'):
-        results.append(res)
-    except Exception:
-      continue
-
-  return {'status': 'success', 'data': results}
+  try:
+    results = scan_all_vcp(account_capital=capital)
+    return {'status': 'success', 'data': results}
+  except Exception as e:
+    return {'status': 'error', 'data': [], 'message': str(e)}
 
 
 @app.api_route('/scan-static-pivot', methods=['GET', 'POST'])

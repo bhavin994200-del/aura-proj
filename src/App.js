@@ -93,9 +93,12 @@ function App() {
             const spotDiff = spotLtp - prevClose;
             const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 
-            let cat = 'F&O';
             const symName = found.symbol || found.name || 'UNKNOWN';
-            if (['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', 'NIFTYIT', 'NIFTYAUTO'].includes(symName)) {
+            let cat = 'F&O';
+            if (
+              ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', 'NIFTYIT', 'NIFTYAUTO', 'NIFTYFMCG', 'NIFTYMETAL', 'NIFTYPHARMA', 'NIFTYENERGY', 'NIFTYINFRA'].some(ind => symName.includes(ind)) ||
+              symName.startsWith('NIFTY')
+            ) {
               cat = 'Index';
             } else if (['NATURALGAS', 'CRUDEOIL', 'GOLD', 'SILVER', 'COPPER', 'ALUMINI', 'ZINC', 'LEAD'].includes(symName)) {
               cat = 'Commodity';
@@ -267,9 +270,12 @@ function HomeDashboard({ marketData, setMarketData }) {
           const spotDiff = spotLtp - prevClose;
           const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 
-          let cat = 'F&O';
           const symName = found.symbol || found.name || 'UNKNOWN';
-          if (['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', 'NIFTYIT', 'NIFTYAUTO'].includes(symName)) {
+          let cat = 'F&O';
+          if (
+            ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', 'NIFTYIT', 'NIFTYAUTO', 'NIFTYFMCG', 'NIFTYMETAL', 'NIFTYPHARMA', 'NIFTYENERGY', 'NIFTYINFRA'].some(ind => symName.includes(ind)) ||
+            symName.startsWith('NIFTY')
+          ) {
             cat = 'Index';
           } else if (['NATURALGAS', 'CRUDEOIL', 'GOLD', 'SILVER', 'COPPER', 'ALUMINI', 'ZINC', 'LEAD'].includes(symName)) {
             cat = 'Commodity';
@@ -387,8 +393,12 @@ function HomeDashboard({ marketData, setMarketData }) {
             filteredData.map((item) => {
               const hRoot = Math.sqrt(item.high || item.ltp);
               const lRoot = Math.sqrt(item.low || item.ltp);
-              const support90 = Math.pow(hRoot - (90 / 180.0), 2).toFixed(2);
-              const resistance90 = Math.pow(lRoot + (90 / 180.0), 2).toFixed(2);
+              
+              // 👈 સપોર્ટ હંમેશાં નીચે અને રેઝિસ્ટન્સ ઉપર રહે તે માટે સચોટ ગણતરી
+              const supVal = Math.pow(hRoot - (90 / 180.0), 2);
+              const resVal = Math.pow(lRoot + (90 / 180.0), 2);
+              const support90 = Math.min(supVal, resVal).toFixed(2);
+              const resistance90 = Math.max(supVal, resVal).toFixed(2);
               
               const spotDiffVal = Number(item.ltp) - Number(item.prevClose);
               const spotPctVal = item.prevClose ? (spotDiffVal / Number(item.prevClose)) * 100 : 0;

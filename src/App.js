@@ -81,7 +81,7 @@ function App() {
               return { 
                 ...ind, 
                 ltp: found.ltp || found.close, 
-                prevClose: found.prev_close || ind.prevClose 
+                prevClose: found.prev_close || found.previous_close || ind.prevClose 
               };
             }
             return ind;
@@ -89,8 +89,7 @@ function App() {
 
           const mappedItems = liveList.map((found, idx) => {
             const spotLtp = found.ltp || found.close || 1000.0;
-            // 👈 Prev Close જો બેકએન્ડમાં અલગથી ન હોય તો જ LTP વાપરવું, બાકી સાચો Prev Close લેવો
-            const prevClose = found.prev_close || (found.close ? (found.close - (found.ltp ? 0 : 0)) : spotLtp - 50);
+            const prevClose = found.prev_close || found.previous_close || found.pc || spotLtp;
             const spotDiff = spotLtp - prevClose;
             const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 
@@ -107,8 +106,8 @@ function App() {
               name: symName,
               category: cat,
               ltp: spotLtp,
-              spotChange: Math.abs(spotDiff).toFixed(2),
-              spotChangePct: Math.abs(spotPct).toFixed(2),
+              spotChange: spotDiff.toFixed(2),
+              spotChangePct: spotPct.toFixed(2),
               prevClose: prevClose,
               high: found.weekly?.resistance || found.high || (spotLtp + 20),
               low: found.weekly?.support || found.low || (spotLtp - 20)
@@ -159,7 +158,7 @@ function App() {
   return (
     <div style={{ display: 'flex', height: '100vh', backgroundColor: '#e4e4e7', color: '#27272a', fontFamily: 'sans-serif' }}>
       
-      {/* Sidebar - Watchlist completely removed */}
+      {/* Sidebar */}
       <div style={{ width: '260px', backgroundColor: '#d4d4d8', borderRight: '1px solid #a1a1aa', display: 'flex', flexDirection: 'column', height: '100vh' }}>
         <div style={{ padding: '20px', borderBottom: '1px solid #a1a1aa', flexShrink: 0 }}>
           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#18181b' }}>
@@ -264,7 +263,7 @@ function HomeDashboard({ marketData, setMarketData }) {
       if (liveList.length > 0) {
         const allMappedItems = liveList.map((found, idx) => {
           const spotLtp = found.ltp || found.close || 1000.0;
-          const prevClose = found.prev_close || (found.close ? found.close : spotLtp - 50);
+          const prevClose = found.prev_close || found.previous_close || found.pc || spotLtp;
           const spotDiff = spotLtp - prevClose;
           const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 
@@ -281,8 +280,8 @@ function HomeDashboard({ marketData, setMarketData }) {
             name: symName,
             category: cat,
             ltp: spotLtp,
-            spotChange: Math.abs(spotDiff).toFixed(2),
-            spotChangePct: Math.abs(spotPct).toFixed(2),
+            spotChange: spotDiff.toFixed(2),
+            spotChangePct: spotPct.toFixed(2),
             prevClose: prevClose,
             high: found.weekly?.resistance || found.high || (spotLtp + 20),
             low: found.weekly?.support || found.low || (spotLtp - 20)
@@ -390,7 +389,9 @@ function HomeDashboard({ marketData, setMarketData }) {
               const lRoot = Math.sqrt(item.low || item.ltp);
               const support90 = Math.pow(hRoot - (90 / 180.0), 2).toFixed(2);
               const resistance90 = Math.pow(lRoot + (90 / 180.0), 2).toFixed(2);
-              const spotDiffVal = item.ltp - item.prevClose;
+              
+              const spotDiffVal = Number(item.ltp) - Number(item.prevClose);
+              const spotPctVal = item.prevClose ? (spotDiffVal / Number(item.prevClose)) * 100 : 0;
               const isSpotPos = spotDiffVal >= 0;
               const isFav = favorites.includes(item.name);
 
@@ -398,10 +399,10 @@ function HomeDashboard({ marketData, setMarketData }) {
                 <tr key={item.id} style={{ borderBottom: '1px solid #a1a1aa' }}>
                   <td style={{ padding: '10px', textAlign: 'center', border: '1px solid #a1a1aa', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}>{item.category}</td>
                   <td style={{ padding: '10px', fontWeight: 'bold', border: '1px solid #a1a1aa', color: '#18181b' }}>{item.name}</td>
-                  <td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold', border: '1px solid #a1a1aa', color: '#18181b' }}>₹ {item.ltp}</td>
+                  <td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold', border: '1px solid #a1a1aa', color: '#18181b' }}>{item.ltp}</td>
                   <td style={{ padding: '10px', textAlign: 'right', border: '1px solid #a1a1aa' }}>
                     <span style={{ fontSize: '11px', backgroundColor: isSpotPos ? '#dcfce7' : '#fee2e2', color: isSpotPos ? '#15803d' : '#b91c1c', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
-                      {isSpotPos ? `+${item.spotChange || spotDiffVal.toFixed(2)}` : `${item.spotChange || spotDiffVal.toFixed(2)}`} ({isSpotPos ? `+${item.spotChangePct || '0.50'}%` : `${item.spotChangePct || '0.50'}%`})
+                      {isSpotPos ? `+${spotDiffVal.toFixed(2)}` : spotDiffVal.toFixed(2)} ({isSpotPos ? `+${spotPctVal.toFixed(2)}%` : `${spotPctVal.toFixed(2)}%`})
                     </span>
                   </td>
                   <td style={{ padding: '10px', textAlign: 'right', border: '1px solid #a1a1aa', color: '#52525b' }}>{item.prevClose}</td>

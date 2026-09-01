@@ -63,7 +63,7 @@ function App() {
     const fetchGlobalLiveData = async () => {
       try {
         const homeSymbols = marketData.map(item => item.name);
-        const symbolsToFetch = Array.from(new Set(['NIFTY', 'BANKNIFTY', 'SENSEX', ...homeSymbols, ...fullFnoList.slice(0, 40)]));
+        const symbolsToFetch = Array.from(new Set(['NIFTY', 'BANKNIFTY', 'SENSEX', ...homeSymbols, ...fullFnoList]));
 
         const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
           method: 'POST',
@@ -79,7 +79,11 @@ function App() {
           setIndices(prevIndices => prevIndices.map(ind => {
             const found = liveList.find(item => item.symbol === ind.name || item.name === ind.name);
             if (found && (found.ltp || found.close)) {
-              return { ...ind, ltp: found.ltp || found.close, prevClose: found.prev_close || found.close || ind.prevClose };
+              return { 
+                ...ind, 
+                ltp: found.ltp || found.close, 
+                prevClose: found.prev_close || found.close || ind.prevClose 
+              };
             }
             return ind;
           }));
@@ -120,7 +124,7 @@ function App() {
               setIndices(prevIndices => prevIndices.map(ind => {
                 const found = liveList.find(item => item.symbol === ind.name || item.name === ind.name);
                 if (found && (found.ltp || found.close)) {
-                  return { ...ind, ltp: found.ltp || found.close };
+                  return { ...ind, ltp: found.ltp || found.close, prevClose: found.prev_close || found.close || ind.prevClose };
                 }
                 return ind;
               }));
@@ -220,8 +224,24 @@ function HomeDashboard({ marketData, setMarketData }) {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [loadingAll, setLoadingAll] = useState(false);
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
 
-  // Auto fetch all stocks on load if marketData is small
+  const [favorites, setFavorites] = useState(() => {
+    const savedFav = localStorage.getItem('aura_favorites');
+    return savedFav ? JSON.parse(savedFav) : [];
+  });
+
+  const toggleFavorite = (name) => {
+    let updatedFavs;
+    if (favorites.includes(name)) {
+      updatedFavs = favorites.filter(item => item !== name);
+    } else {
+      updatedFavs = [...favorites, name];
+    }
+    setFavorites(updatedFavs);
+    localStorage.setItem('aura_favorites', JSON.stringify(updatedFavs));
+  };
+
   useEffect(() => {
     if (marketData.length <= 3) {
       handleLoadAllStocks();
@@ -250,7 +270,7 @@ function HomeDashboard({ marketData, setMarketData }) {
 
           let cat = 'F&O';
           const symName = found.symbol || found.name || 'UNKNOWN';
-          if (['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY'].includes(symName)) {
+          if (['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', 'NIFTYIT', 'NIFTYAUTO'].includes(symName)) {
             cat = 'Index';
           } else if (['NATURALGAS', 'CRUDEOIL', 'GOLD', 'SILVER', 'COPPER', 'ALUMINI', 'ZINC', 'LEAD'].includes(symName)) {
             cat = 'Commodity';
@@ -278,16 +298,11 @@ function HomeDashboard({ marketData, setMarketData }) {
     setLoadingAll(false);
   };
 
-  const handleDeleteStock = (id) => {
-    const updatedList = marketData.filter(item => item.id !== id);
-    setMarketData(updatedList);
-    localStorage.setItem('vedicedge_home_market', JSON.stringify(updatedList));
-  };
-
   const filteredData = marketData.filter(item => {
     const matchesCategory = selectedCategory === 'ALL' || item.category === selectedCategory;
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesCategory && matchesSearch;
+    const matchesFav = !showOnlyFavorites || favorites.includes(item.name);
+    return matchesCategory && matchesSearch && matchesFav;
   });
 
   return (
@@ -295,7 +310,7 @@ function HomeDashboard({ marketData, setMarketData }) {
       <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>Market Overview</h2>
       <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>Manage Indices, F&O, and Commodities</p>
       
-      {/* Search Bar & Refresh */}
+      {/* Search Bar, Refresh & Heart Filter */}
       <div style={{ display: 'flex', gap: '10px', marginTop: '15px', marginBottom: '15px', alignItems: 'center' }}>
         <input 
           type="text" 
@@ -304,6 +319,22 @@ function HomeDashboard({ marketData, setMarketData }) {
           onChange={(e) => setSearchTerm(e.target.value)} 
           style={{ ...inputStyle, flex: 1, padding: '12px', fontSize: '14px', background: '#ffffff' }} 
         />
+        <button 
+          onClick={() => setShowOnlyFavorites(!showOnlyFavorites)} 
+          style={{ 
+            padding: '12px 18px', 
+            backgroundColor: showOnlyFavorites ? '#ef4444' : '#ffffff', 
+            color: showOnlyFavorites ? '#ffffff' : '#ef4444', 
+            border: '1px solid #ef4444', 
+            borderRadius: '6px', 
+            fontWeight: 'bold', 
+            cursor: 'pointer',
+            fontSize: '16px'
+          }}
+          title="Filter Favorites"
+        >
+          ❤️
+        </button>
         <button 
           onClick={handleLoadAllStocks} 
           disabled={loadingAll}
@@ -345,7 +376,7 @@ function HomeDashboard({ marketData, setMarketData }) {
             <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Prev Close</th>
             <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Low / High</th>
             <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Support (90°) / Resist (90°)</th>
-            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Action</th>
+            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Favorite</th>
           </tr>
         </thead>
         <tbody>
@@ -361,6 +392,7 @@ function HomeDashboard({ marketData, setMarketData }) {
               const resistance90 = Math.pow(lRoot + (90 / 180.0), 2).toFixed(2);
               const spotDiffVal = item.ltp - item.prevClose;
               const isSpotPos = spotDiffVal >= 0;
+              const isFav = favorites.includes(item.name);
 
               return (
                 <tr key={item.id} style={{ borderBottom: '1px solid #a1a1aa' }}>
@@ -380,7 +412,13 @@ function HomeDashboard({ marketData, setMarketData }) {
                     <span style={{ color: '#166534', fontWeight: '600' }}>S: {support90}</span> | <span style={{ color: '#991b1b', fontWeight: '600' }}>R: {resistance90}</span>
                   </td>
                   <td style={{ padding: '10px', textAlign: 'center', border: '1px solid #a1a1aa' }}>
-                    <button onClick={() => handleDeleteStock(item.id)} style={{ background: '#b91c1c', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+                    <button 
+                      onClick={() => toggleFavorite(item.name)} 
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '18px' }}
+                      title="Toggle Favorite"
+                    >
+                      {isFav ? '❤️' : '🤍'}
+                    </button>
                   </td>
                 </tr>
               );

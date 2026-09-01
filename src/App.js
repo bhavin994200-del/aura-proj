@@ -106,7 +106,24 @@ function App() {
           setLastUpdated(new Date().toLocaleTimeString());
         }
       } catch (e) {
-        console.log("Global live fetch polling error (Server waking up)");
+        console.log("Global live fetch polling error, checking cache...");
+        const cached = localStorage.getItem('master_cached_market_data');
+        if (cached) {
+          try {
+            const liveList = JSON.parse(cached);
+            if (Array.isArray(liveList) && liveList.length > 0) {
+              setIndices(prevIndices => prevIndices.map(ind => {
+                const found = liveList.find(item => item.symbol === ind.name || item.name === ind.name);
+                if (found && (found.ltp || found.close)) {
+                  return { ...ind, ltp: found.ltp || found.close };
+                }
+                return ind;
+              }));
+            }
+          } catch (err) {
+            console.log("Cache parse error");
+          }
+        }
       }
     };
 

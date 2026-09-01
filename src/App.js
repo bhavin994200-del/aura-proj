@@ -55,6 +55,15 @@ function App() {
   }
 
   useEffect(() => {
+    // 👈 સર્વરને જાગૃત (Active) રાખવા માટે બેકએન્ડ પિંગ ફંક્શન
+    const keepServerAlive = () => {
+      fetch('https://aura-proj.onrender.com/scan-static-pivot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols: ['NIFTY'] })
+      }).catch(() => {});
+    };
+
     const fetchGlobalLiveData = async () => {
       try {
         const homeSymbols = marketData.map(item => item.name);
@@ -127,10 +136,17 @@ function App() {
       }
     };
 
+    keepServerAlive();
     fetchGlobalLiveData();
     const interval = setInterval(fetchGlobalLiveData, 5000);
+    
+    // 👈 દર 25 સેકન્ડે સર્વરને પિંગ કર્યા કરશે જેથી રેન્ડર સ્લીપ ન થાય
+    const keepAliveInterval = setInterval(keepServerAlive, 25000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      clearInterval(keepAliveInterval);
+    };
   }, []);
 
   return (

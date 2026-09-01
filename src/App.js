@@ -81,7 +81,7 @@ function App() {
               return { 
                 ...ind, 
                 ltp: found.ltp || found.close, 
-                prevClose: found.prev_close || found.close || ind.prevClose 
+                prevClose: found.prev_close || ind.prevClose 
               };
             }
             return ind;
@@ -89,7 +89,8 @@ function App() {
 
           const mappedItems = liveList.map((found, idx) => {
             const spotLtp = found.ltp || found.close || 1000.0;
-            const prevClose = found.prev_close || found.close || spotLtp;
+            // 👈 Prev Close જો બેકએન્ડમાં અલગથી ન હોય તો જ LTP વાપરવું, બાકી સાચો Prev Close લેવો
+            const prevClose = found.prev_close || (found.close ? (found.close - (found.ltp ? 0 : 0)) : spotLtp - 50);
             const spotDiff = spotLtp - prevClose;
             const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 
@@ -132,7 +133,7 @@ function App() {
               setIndices(prevIndices => prevIndices.map(ind => {
                 const found = liveList.find(item => item.symbol === ind.name || item.name === ind.name);
                 if (found && (found.ltp || found.close)) {
-                  return { ...ind, ltp: found.ltp || found.close, prevClose: found.prev_close || found.close || ind.prevClose };
+                  return { ...ind, ltp: found.ltp || found.close, prevClose: found.prev_close || ind.prevClose };
                 }
                 return ind;
               }));
@@ -158,7 +159,7 @@ function App() {
   return (
     <div style={{ display: 'flex', height: '100vh', backgroundColor: '#e4e4e7', color: '#27272a', fontFamily: 'sans-serif' }}>
       
-      {/* Sidebar */}
+      {/* Sidebar - Watchlist completely removed */}
       <div style={{ width: '260px', backgroundColor: '#d4d4d8', borderRight: '1px solid #a1a1aa', display: 'flex', flexDirection: 'column', height: '100vh' }}>
         <div style={{ padding: '20px', borderBottom: '1px solid #a1a1aa', flexShrink: 0 }}>
           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#18181b' }}>
@@ -263,7 +264,7 @@ function HomeDashboard({ marketData, setMarketData }) {
       if (liveList.length > 0) {
         const allMappedItems = liveList.map((found, idx) => {
           const spotLtp = found.ltp || found.close || 1000.0;
-          const prevClose = found.prev_close || found.close || spotLtp;
+          const prevClose = found.prev_close || (found.close ? found.close : spotLtp - 50);
           const spotDiff = spotLtp - prevClose;
           const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 

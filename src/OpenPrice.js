@@ -2,17 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { fullFnoList } from './watchlistData';
 
 function OpenPrice() {
-  const todayKey = new Date().toISOString().split('T')[0]; // આજની તારીખ (YYYY-MM-DD)
+  const todayKey = new Date().toISOString().split('T')[0];
   
   const [marketData, setMarketData] = useState(() => {
     const savedDate = localStorage.getItem('vedicedge_openprice_date');
     const saved = localStorage.getItem('vedicedge_openprice_data');
     if (savedDate === todayKey && saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return [];
-      }
+      try { return JSON.parse(saved); } catch (e) { return []; }
     }
     return [];
   });
@@ -25,7 +21,6 @@ function OpenPrice() {
     return savedDate === todayKey ? (localStorage.getItem('vedicedge_openprice_time') || '') : '';
   });
 
-  // OpenPrice ટેબની અંદર જ ટ્રેડ બુક/લોગ માટેનું સ્ટેટ
   const [tradeBookLog, setTradeBookLog] = useState(() => {
     const savedLog = localStorage.getItem('vedicedge_openprice_tradebook');
     return savedLog ? JSON.parse(savedLog) : [];
@@ -33,22 +28,17 @@ function OpenPrice() {
 
   const isInitialMount = useRef(true);
 
-  // બીપ સાઉન્ડ વગાડવા માટેનું ફંક્શન (Web Audio API)
   const playBeepSound = (type) => {
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-
       osc.type = 'sine';
       osc.frequency.value = type === 'BUY' ? 880 : 440; 
-      
       gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-
       osc.connect(gain);
       gain.connect(audioCtx.destination);
-
       osc.start();
       osc.stop(audioCtx.currentTime + 0.5);
     } catch (e) {
@@ -56,7 +46,6 @@ function OpenPrice() {
     }
   };
 
-  // આખું નવું સ્કેનિંગ (ક્લાઉડ લાઈવ બેકેન્ડ સાથે)
   const fetchAllOpenPrices = async (isRefresh = false) => {
     const savedDate = localStorage.getItem('vedicedge_openprice_date');
     if (!isRefresh && savedDate === todayKey && marketData.length > 0) {
@@ -75,7 +64,6 @@ function OpenPrice() {
       const fetchedData = json.data || [];
       const timeStr = new Date().toLocaleTimeString();
 
-      // જો પહેલેથી લોકલ સ્ટોરેજમાં ડેટા હોય તો ટ્રિગર સ્ટેટ અને triggeredAt જાળવી રાખો
       setMarketData(prevList => {
         if (prevList.length === 0) return fetchedData;
         return fetchedData.map(newItem => {
@@ -98,7 +86,6 @@ function OpenPrice() {
       localStorage.setItem('vedicedge_openprice_date', todayKey);
       localStorage.setItem('vedicedge_openprice_data', JSON.stringify(fetchedData));
       localStorage.setItem('vedicedge_openprice_time', timeStr);
-      
       isInitialMount.current = false;
     } catch (e) {
       console.log("OpenPrice Fetch Error:", e);
@@ -106,7 +93,7 @@ function OpenPrice() {
     setLoading(false);
   };
 
-  // ફક્ત લાઈવ LTP અને વાસ્તવિક ક્રોસઓવર અપડેટ કરવા માટેનું ફંક્શન
+  // 👈 બેકગ્રાઉન્ડ લાઈવ અપડેટ (લોડિંગ સ્ટેટ વગરનું, જેથી ક્યારેય બટન અટકશે નહીં)
   const updateLiveLtpOnly = async () => {
     try {
       const res = await fetch('https://aura-proj.onrender.com/scan-open-price', {
@@ -127,7 +114,6 @@ function OpenPrice() {
 
         setMarketData(prevList => {
           const baseList = prevList.length > 0 ? prevList : updatedList;
-
           updatedState = baseList.map(oldItem => {
             const found = updatedList.find(newItem => newItem.symbol === oldItem.symbol);
             if (!found) return oldItem;
@@ -135,11 +121,9 @@ function OpenPrice() {
             const oldStatus = oldItem.status; 
             const newStatus = found.status;
 
-            // જો અગાઉ RANGE હતું અને હવે વાસ્તવમાં BUY કે SELL થયું, તો જ નવો ટ્રિગર ગણવો
             if (!isInitialMount.current && oldStatus === 'RANGE' && (newStatus === 'BUY' || newStatus === 'SELL')) {
               playBeepSound(newStatus);
               hasNewTrigger = true;
-              
               const triggerPriceVal = newStatus === 'BUY' ? found.buyLvl : found.sellLvl;
 
               const alreadyExists = newLogs.some(log => log.symbol === found.symbol);
@@ -166,11 +150,7 @@ function OpenPrice() {
             }
 
             if (oldStatus === 'BUY' || oldStatus === 'SELL') {
-              return {
-                ...oldItem,
-                ltp: found.ltp,
-                triggeredAt: oldItem.triggeredAt
-              };
+              return { ...oldItem, ltp: found.ltp, triggeredAt: oldItem.triggeredAt };
             }
 
             return {
@@ -195,7 +175,6 @@ function OpenPrice() {
           localStorage.setItem('vedicedge_openprice_tradebook', JSON.stringify(newLogs));
         }
 
-        // 👈 લાઈવ ટાઈમ દર 5 સેકન્ડે અપડેટ થશે
         setLastUpdated(timeStr);
         localStorage.setItem('vedicedge_openprice_time', timeStr);
         isInitialMount.current = false;
@@ -207,7 +186,7 @@ function OpenPrice() {
 
   useEffect(() => {
     fetchAllOpenPrices();
-    const interval = setInterval(updateLiveLtpOnly, 5000); // 👈 5 સેકન્ડનો લાઈવ રિફ્રેશ ટાઈમર
+    const interval = setInterval(updateLiveLtpOnly, 5000); 
     return () => clearInterval(interval);
   }, []);
 

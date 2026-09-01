@@ -33,7 +33,6 @@ function StaticPivotScanner() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 👈 ડેશબોર્ડ અને સ્કેનર બંનેના LTP એકસરખા કરવા માટે માસ્ટર કેશ મર્જ ફંક્શન
   const getMergedLiveData = (apiData) => {
     try {
       const masterCache = localStorage.getItem('master_cached_market_data');
@@ -61,7 +60,7 @@ function StaticPivotScanner() {
 
   const fetchStaticData = async (isManual = false) => {
     if (!isManual && staticData.length > 0) return;
-    setLoading(true);
+    if (isManual) setLoading(true);
     try {
       const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
         method: 'POST',
@@ -73,7 +72,6 @@ function StaticPivotScanner() {
       const wDate = json.weekly_date || '';
       const mDate = json.monthly_date || '';
 
-      // 👈 ડેશબોર્ડ સાથે સિંક કરવા માટે LTP અપડેટ કરો
       fetchedData = getMergedLiveData(fetchedData);
 
       setStaticData(fetchedData);
@@ -88,7 +86,7 @@ function StaticPivotScanner() {
       localStorage.setItem('cached_monthly_date', mDate);
 
     } catch(e) { console.log(e); }
-    setLoading(false);
+    if (isManual) setLoading(false);
   };
 
   useEffect(() => {
@@ -99,8 +97,7 @@ function StaticPivotScanner() {
 
     if (cachedData) {
       let parsed = JSON.parse(cachedData);
-      parsed = getMergedLiveData(parsed); // 👈 કેશ ડેટા પણ ડેશબોર્ડ સાથે મર્જ કરો
-      setStaticData(parsed);
+      setStaticData(getMergedLiveData(parsed));
     }
     if (cachedTime) setLastRefreshTime(cachedTime);
     if (cachedWeekly) setWeeklyDate(cachedWeekly);
@@ -111,7 +108,10 @@ function StaticPivotScanner() {
       fetchStaticData(true);
     }
 
-    const interval = setInterval(() => { fetchStaticData(true); }, 5000); // 👈 5 સેકન્ડમાં ઓટો રિફ્રેશ
+    // 👈 5 સેકન્ડનો ઓટો-રિફ્રેશ ટાઈમર (બિનજરૂરી લોડિંગ વગર બેકગ્રાઉન્ડમાં સિન્ક થશે)
+    const interval = setInterval(() => { 
+      fetchStaticData(false); 
+    }, 5000); 
 
     const savedWatch = localStorage.getItem('my_watchlist');
     if (savedWatch) setWatchlist(JSON.parse(savedWatch));

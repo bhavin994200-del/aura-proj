@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 function VcpScanner() {
   const [vcpData, setVcpData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [capital, setCapital] = useState(500000);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [hasScanned, setHasScanned] = useState(false); // સ્કેન થયા પછી જ સાચો મેસેજ દેખાડવા માટે
 
   const fetchVcpSignals = async () => {
     setLoading(true);
+    setErrorMsg('');
     try {
       const res = await fetch('https://aura-proj.onrender.com/scan-vcp', {
         method: 'POST',
@@ -14,16 +17,18 @@ function VcpScanner() {
         body: JSON.stringify({ capital: Number(capital) })
       });
       const json = await res.json();
-      setVcpData(json.data || []);
+      if (json.status === 'success') {
+        setVcpData(json.data || []);
+      } else {
+        setErrorMsg('બેકએન્ડ સર્વર પરથી ડેટા મેળવવામાં સમસ્યા આવી છે.');
+      }
     } catch (e) {
       console.log("VCP Scan Error:", e);
+      setErrorMsg('સર્વર કનેક્ટ થઈ શક્યું નથી. કૃપા કરીને થોડીવાર પછી પ્રયત્ન કરો.');
     }
     setLoading(false);
+    setHasScanned(true);
   };
-
-  useEffect(() => {
-    fetchVcpSignals();
-  }, []);
 
   return (
     <div style={{ background: 'white', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
@@ -45,10 +50,16 @@ function VcpScanner() {
             disabled={loading}
             style={{ padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
           >
-            {loading ? 'Scanning All F&O...' : '🚀 Run VCP Scan'}
+            {loading ? '⏳ Scanning All F&O...' : '🚀 Run VCP Scan'}
           </button>
         </div>
       </div>
+
+      {errorMsg && (
+        <div style={{ padding: '12px', background: '#fee2e2', color: '#991b1b', borderRadius: '8px', marginBottom: '15px', fontWeight: 'bold', fontSize: '13px' }}>
+          ⚠️ {errorMsg}
+        </div>
+      )}
 
       <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
@@ -69,7 +80,16 @@ function VcpScanner() {
             {vcpData.length === 0 ? (
               <tr>
                 <td colSpan="9" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
-                  {loading ? 'બધા જ F&O સ્ટોક્સ સ્કેન થઈ રહ્યા છે, કૃપા કરીને રાહ જુઓ...' : 'આજે કોઈ સ્ટોક પર VCP Confluence સિગ્નલ મળ્યું નથી.'}
+                  {loading ? (
+                    <div>
+                      <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#7c3aed', marginBottom: '5px' }}>🚀 બધા જ F&O સ્ટોક્સ મલ્ટિથ્રેડિંગ દ્વારા સ્કેન થઈ રહ્યા છે...</div>
+                      <div style={{ fontSize: '12px' }}>કૃપા કરીને 5 થી 10 સેકન્ડ રાહ જુઓ.</div>
+                    </div>
+                  ) : !hasScanned ? (
+                    '👆 ઉપર આપેલું "🚀 Run VCP Scan" બટન દબાવો જેથી માર્કેટ સ્કેન શરૂ થાય.'
+                  ) : (
+                    'આજે કોઈ સ્ટોક પર VCP Confluence સિગ્નલ મળ્યું નથી.'
+                  )}
                 </td>
               </tr>
             ) : (

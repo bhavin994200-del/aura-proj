@@ -78,6 +78,7 @@ function StaticPivotScanner() {
       setWeeklyDate(wDate);
       setMonthlyDate(mDate);
       
+      // 👈 હવે બેકગ્રાઉન્ડ સિન્ક વખતે પણ Last Refresh Time એકદમ લાઈવ અપડેટ થશે
       const currentTime = new Date().toLocaleTimeString();
       setLastRefreshTime(currentTime);
       localStorage.setItem('last_refresh_time', currentTime);
@@ -108,7 +109,6 @@ function StaticPivotScanner() {
       fetchStaticData(true);
     }
 
-    // 👈 5 સેકન્ડનો ઓટો-રિફ્રેશ ટાઈમર (બિનજરૂરી લોડિંગ વગર બેકગ્રાઉન્ડમાં સિન્ક થશે)
     const interval = setInterval(() => { 
       fetchStaticData(false); 
     }, 5000); 
@@ -507,7 +507,7 @@ function StaticPivotScanner() {
                     <td style={{ padding: '10px', textAlign: 'center', verticalAlign: 'middle' }}>
                       <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
                         <button onClick={() => {
-                          const text = `📅 Setup: ${item.symbol} (Close: ₹${formattedClose} | LTP: ₹{item.ltp} | RSI: ${rsiVal})\n🟢 S: ₹{supportVal} | 🔴 R: ₹{resistanceVal}\n📈 Up 45°: ₹{up.g45} | 90°: ₹${up.g90}`;
+                          const text = `📅 Setup: ${item.symbol} (Close: ₹${formattedClose} | LTP: ₹{item.ltp} | RSI: ${rsiVal})\n🟢 S: ₹{supportVal} | 🔴 R: ₹{resistanceVal}\n📈 Up 45°: ₹{up.g45} | 90°: ₹{up.g90}`;
                           navigator.clipboard.writeText(text);
                           alert(`📋 ${item.symbol} કૉપી થઈ ગયું છે!`);
                         }} style={{ padding: '5px 8px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '10px', fontWeight: 'bold' }}>📋 Copy</button>

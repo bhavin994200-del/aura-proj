@@ -127,13 +127,15 @@ function StaticPivotScanner() {
     localStorage.setItem('my_watchlist', JSON.stringify(updated));
   };
 
-  // 👈 સપોર્ટ (નીચે/માઇનસ) અને રેઝિસ્ટન્સ (ઉપર/પ્લસ) ની ગણતરી બરાબર સીધી કરી દીધી છે
+  // 👈 સપોર્ટ હંમેશાં લાઈવ LTP / Close થી નીચે અને રેઝિસ્ટન્સ ઉપર રહે તે માટેની સાચી ગણતરી
   const getSafeValues = (closePrice) => {
     if (!closePrice) return { support: 0, resistance: 0 };
     const r = Math.sqrt(closePrice);
+    const sup = Math.round(((r - 1.0) ** 2) * 100) / 100;
+    const res = Math.round(((r + 1.0) ** 2) * 100) / 100;
     return {
-      support: Math.round(((r - 1.0) ** 2) * 100) / 100,
-      resistance: Math.round(((r + 1.0) ** 2) * 100) / 100
+      support: Math.min(sup, res),
+      resistance: Math.max(sup, res)
     };
   };
 
@@ -312,7 +314,7 @@ function StaticPivotScanner() {
         const up = d.gann?.up || {};
         const closeFormatted = Number(d.close || 0).toFixed(2);
         const rsiVal = getStockRsi(item);
-        text += `Stock: ${item.symbol} | Close: ₹${closeFormatted} | LTP: ₹${item.ltp} | RSI: ${rsiVal}\n🟢 Support: ₹${supportVal} | 🔴 Resistance: ₹${resistanceVal}\n📈 Up 45°: ₹${up.g45} | 90°: ₹${up.g90}\n-----------------------------------\n`;
+        text += `Stock: ${item.symbol} | Close: ₹${closeFormatted} | LTP: ₹{item.ltp} | RSI: ${rsiVal}\n🟢 Support: ₹${supportVal} | 🔴 Resistance: ₹${resistanceVal}\n📈 Up 45°: ₹${up.g45} | 90°: ₹${up.g90}\n-----------------------------------\n`;
       }
     });
     navigator.clipboard.writeText(text);
@@ -461,10 +463,10 @@ function StaticPivotScanner() {
                 const mom = item.momentum || {};
                 const rsiVal = getStockRsi(item);
 
-                // 👈 સેક્ટર્સ અને ઇન્ડેક્સને 'Index' કેટેગરીમાં દર્શાવવા માટેનું ચેક
+                // 👈 બધાજ નિફ્ટી સેક્ટર્સ અને ઇન્ડેક્સ માટે 'Index' કેટેગરી કન્ફર્મ કરી છે
                 let categoryLabel = 'F&O';
                 if (
-                  ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', 'NIFTYIT', 'NIFTYAUTO', 'NIFTYFMCG', 'NIFTYMETAL', 'NIFTYPHARMA', 'NIFTYENERGY', 'NIFTYINFRA'].includes(item.symbol) ||
+                  ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', 'NIFTYIT', 'NIFTYAUTO', 'NIFTYFMCG', 'NIFTYMETAL', 'NIFTYPHARMA', 'NIFTYENERGY', 'NIFTYINFRA'].some(ind => item.symbol.includes(ind)) ||
                   item.symbol.startsWith('NIFTY')
                 ) {
                   categoryLabel = 'Index';
@@ -478,7 +480,19 @@ function StaticPivotScanner() {
                           {isFav ? '⭐' : '☆'}
                         </button>
                         <span style={{ color: status.color, fontSize: '15px', fontWeight: 'bold' }}>{item.symbol}</span>
-                        <span style={{ fontSize: '10px', background: categoryLabel === 'Index' ? '#dbeafe' : '#f1f5f9', color: categoryLabel === 'Index' ? '#1e40af' : '#475569', padding: '2px 5px', borderRadius: '4px', fontWeight: 'bold' }}>{categoryLabel}</span>
+                        {/* 👈 કેટેગરી બદલવા માટે ડ્રોપડાઉન (તમે ઇચ્હો તો આનાથી બદલી શકશો) */}
+                        <select 
+                          value={item.customCategory || categoryLabel} 
+                          onChange={(e) => {
+                            const updated = [...staticData];
+                            updated[idx] = { ...updated[idx], customCategory: e.target.value };
+                            setStaticData(updated);
+                          }}
+                          style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '4px', background: '#f1f5f9', fontWeight: 'bold', cursor: 'pointer' }}
+                        >
+                          <option value="Index">INDEX</option>
+                          <option value="F&O">F&O</option>
+                        </select>
                         <span>{status.symbol}</span>
                       </div>
                       {confluenceScore === 2 && (

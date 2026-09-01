@@ -79,7 +79,7 @@ function App() {
           setIndices(prevIndices => prevIndices.map(ind => {
             const found = liveList.find(item => item.symbol === ind.name || item.name === ind.name);
             if (found && (found.ltp || found.close)) {
-              return { ...ind, ltp: found.ltp || found.close };
+              return { ...ind, ltp: found.ltp || found.close, prevClose: found.prev_close || found.close || ind.prevClose };
             }
             return ind;
           }));
@@ -88,7 +88,7 @@ function App() {
             const found = liveList.find(i => i.symbol === item.name || i.name === item.name);
             if (found && (found.ltp || found.close)) {
               const spotLtp = found.ltp || found.close;
-              const prevClose = found.prev_close || item.prevClose;
+              const prevClose = found.prev_close || found.close || item.prevClose;
               const spotDiff = spotLtp - prevClose;
               const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 
@@ -218,9 +218,15 @@ function App() {
 
 function HomeDashboard({ marketData, setMarketData }) {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
-  const [newName, setNewName] = useState('');
-  const [newCategory, setNewCategory] = useState('F&O');
+  const [searchTerm, setSearchTerm] = useState('');
   const [loadingAll, setLoadingAll] = useState(false);
+
+  // Auto fetch all stocks on load if marketData is small
+  useEffect(() => {
+    if (marketData.length <= 3) {
+      handleLoadAllStocks();
+    }
+  }, []);
 
   const handleLoadAllStocks = async () => {
     setLoadingAll(true);
@@ -238,14 +244,22 @@ function HomeDashboard({ marketData, setMarketData }) {
       if (liveList.length > 0) {
         const allMappedItems = liveList.map((found, idx) => {
           const spotLtp = found.ltp || found.close || 1000.0;
-          const prevClose = found.prev_close || (spotLtp - 10);
+          const prevClose = found.prev_close || found.close || (spotLtp - 10);
           const spotDiff = spotLtp - prevClose;
           const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 
+          let cat = 'F&O';
+          const symName = found.symbol || found.name || 'UNKNOWN';
+          if (['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY'].includes(symName)) {
+            cat = 'Index';
+          } else if (['NATURALGAS', 'CRUDEOIL', 'GOLD', 'SILVER', 'COPPER', 'ALUMINI', 'ZINC', 'LEAD'].includes(symName)) {
+            cat = 'Commodity';
+          }
+
           return {
             id: Date.now() + idx,
-            name: found.symbol || found.name || 'UNKNOWN',
-            category: 'F&O',
+            name: symName,
+            category: cat,
             ltp: spotLtp,
             spotChange: Math.abs(spotDiff).toFixed(2),
             spotChangePct: Math.abs(spotPct).toFixed(2),
@@ -259,55 +273,9 @@ function HomeDashboard({ marketData, setMarketData }) {
         localStorage.setItem('vedicedge_home_market', JSON.stringify(allMappedItems));
       }
     } catch (err) {
-      alert("Error loading all stocks data!");
+      console.log("Error loading all stocks data!");
     }
     setLoadingAll(false);
-  };
-
-  const handleAddStock = async (e) => {
-    e.preventDefault();
-    if (!newName) return;
-
-    const cleanSymbol = newName.trim().toUpperCase();
-    
-    if (marketData.some(item => item.name === cleanSymbol)) {
-      alert("Stock is already added in Home Dashboard!");
-      setNewName('');
-      return;
-    }
-
-    try {
-      const res = await fetch('https://aura-proj.onrender.com/calculate-stock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stock_symbol: cleanSymbol })
-      });
-      const data = await res.json();
-      
-      const spotLtp = data.ltp || 1000.0;
-      const prevClose = data.prev_close || (spotLtp - 10);
-      const spotDiff = spotLtp - prevClose;
-      const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
-
-      const newItem = {
-        id: Date.now(),
-        name: cleanSymbol,
-        category: newCategory,
-        ltp: spotLtp,
-        spotChange: Math.abs(spotDiff).toFixed(2),
-        spotChangePct: Math.abs(spotPct).toFixed(2),
-        prevClose: prevClose,
-        high: data.high || (spotLtp + 20),
-        low: data.low || (spotLtp - 20)
-      };
-
-      const updatedList = [...marketData, newItem];
-      setMarketData(updatedList);
-      localStorage.setItem('vedicedge_home_market', JSON.stringify(updatedList));
-      setNewName('');
-    } catch (err) {
-      alert("Error fetching stock data from backend!");
-    }
   };
 
   const handleDeleteStock = (id) => {
@@ -316,53 +284,34 @@ function HomeDashboard({ marketData, setMarketData }) {
     localStorage.setItem('vedicedge_home_market', JSON.stringify(updatedList));
   };
 
-  const filteredData = selectedCategory === 'ALL' 
-    ? marketData 
-    : marketData.filter(item => item.category === selectedCategory);
+  const filteredData = marketData.filter(item => {
+    const matchesCategory = selectedCategory === 'ALL' || item.category === selectedCategory;
+    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   return (
     <div>
       <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>Market Overview</h2>
       <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>Manage Indices, F&O, and Commodities</p>
       
-      <div style={{ marginTop: '15px', marginBottom: '15px' }}>
+      {/* Search Bar & Refresh */}
+      <div style={{ display: 'flex', gap: '10px', marginTop: '15px', marginBottom: '15px', alignItems: 'center' }}>
+        <input 
+          type="text" 
+          placeholder="🔍 Search Stock, Index or Commodity..." 
+          value={searchTerm} 
+          onChange={(e) => setSearchTerm(e.target.value)} 
+          style={{ ...inputStyle, flex: 1, padding: '12px', fontSize: '14px', background: '#ffffff' }} 
+        />
         <button 
           onClick={handleLoadAllStocks} 
           disabled={loadingAll}
-          style={{ padding: '10px 20px', backgroundColor: '#3f3f46', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+          style={{ padding: '12px 20px', backgroundColor: '#3f3f46', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
         >
-          {loadingAll ? 'Loading All Stocks...' : '📥 Load All F&O / Index / Commodity Stocks'}
+          {loadingAll ? 'Refreshing...' : '🔄 Refresh All'}
         </button>
       </div>
-
-      <form onSubmit={handleAddStock} style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: '#d4d4d8', padding: '15px', borderRadius: '10px', border: '1px solid #a1a1aa', flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ flex: '2', minWidth: '180px' }}>
-          <input 
-            type="text" 
-            list="instruments-list"
-            placeholder="Instrument Name" 
-            value={newName} 
-            onChange={(e) => setNewName(e.target.value)} 
-            style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} 
-            required 
-          />
-          <datalist id="instruments-list">
-            {fullFnoList.map((item, idx) => (
-              <option key={idx} value={item} />
-            ))}
-          </datalist>
-        </div>
-
-        <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={inputStyle}>
-          <option value="Index">Index</option>
-          <option value="F&O">F&O</option>
-          <option value="Commodity">Commodity</option>
-        </select>
-
-        <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#3f3f46', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-          + Add Item
-        </button>
-      </form>
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         {['ALL', 'Index', 'F&O', 'Commodity'].map((cat) => (

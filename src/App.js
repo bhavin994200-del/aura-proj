@@ -28,8 +28,8 @@ function App() {
         name: sym,
         category: 'Index',
         ltp: Number(base.toFixed(2)),
-        spotChange: 120.50,
-        spotChangePct: 0.50,
+        spotChange: 0.00,
+        spotChangePct: 0.00,
         prevClose: Number((base - 100).toFixed(2)),
         high: Number((base + 150).toFixed(2)),
         low: Number((base - 120).toFixed(2))
@@ -62,8 +62,7 @@ function App() {
 
     const fetchGlobalLiveData = async () => {
       try {
-        const homeSymbols = marketData.map(item => item.name);
-        const symbolsToFetch = Array.from(new Set(['NIFTY', 'BANKNIFTY', 'SENSEX', ...homeSymbols, ...fullFnoList]));
+        const symbolsToFetch = Array.from(new Set(['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', ...fullFnoList]));
 
         const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
           method: 'POST',
@@ -88,26 +87,35 @@ function App() {
             return ind;
           }));
 
-          setMarketData(prevMarket => prevMarket.map(item => {
-            const found = liveList.find(i => i.symbol === item.name || i.name === item.name);
-            if (found && (found.ltp || found.close)) {
-              const spotLtp = found.ltp || found.close;
-              const prevClose = found.prev_close || found.close || item.prevClose;
-              const spotDiff = spotLtp - prevClose;
-              const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
+          const mappedItems = liveList.map((found, idx) => {
+            const spotLtp = found.ltp || found.close || 1000.0;
+            const prevClose = found.prev_close || found.close || spotLtp;
+            const spotDiff = spotLtp - prevClose;
+            const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 
-              return {
-                ...item,
-                ltp: spotLtp,
-                spotChange: Math.abs(spotDiff).toFixed(2),
-                spotChangePct: Math.abs(spotPct).toFixed(2),
-                prevClose: prevClose,
-                high: found.weekly?.resistance || found.high || item.high,
-                low: found.weekly?.support || found.low || item.low
-              };
+            let cat = 'F&O';
+            const symName = found.symbol || found.name || 'UNKNOWN';
+            if (['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', 'NIFTYIT', 'NIFTYAUTO'].includes(symName)) {
+              cat = 'Index';
+            } else if (['NATURALGAS', 'CRUDEOIL', 'GOLD', 'SILVER', 'COPPER', 'ALUMINI', 'ZINC', 'LEAD'].includes(symName)) {
+              cat = 'Commodity';
             }
-            return item;
-          }));
+
+            return {
+              id: idx + 1,
+              name: symName,
+              category: cat,
+              ltp: spotLtp,
+              spotChange: Math.abs(spotDiff).toFixed(2),
+              spotChangePct: Math.abs(spotPct).toFixed(2),
+              prevClose: prevClose,
+              high: found.weekly?.resistance || found.high || (spotLtp + 20),
+              low: found.weekly?.support || found.low || (spotLtp - 20)
+            };
+          });
+
+          setMarketData(mappedItems);
+          localStorage.setItem('vedicedge_home_market', JSON.stringify(mappedItems));
 
           if (response.india_vix) {
             setIndiaVix(response.india_vix);
@@ -242,17 +250,10 @@ function HomeDashboard({ marketData, setMarketData }) {
     localStorage.setItem('aura_favorites', JSON.stringify(updatedFavs));
   };
 
-  useEffect(() => {
-    if (marketData.length <= 3) {
-      handleLoadAllStocks();
-    }
-  }, []);
-
-  const handleLoadAllStocks = async () => {
+  const handleRefresh = async () => {
     setLoadingAll(true);
     try {
-      const symbolsToFetch = fullFnoList;
-
+      const symbolsToFetch = Array.from(new Set(['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', ...fullFnoList]));
       const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -264,7 +265,7 @@ function HomeDashboard({ marketData, setMarketData }) {
       if (liveList.length > 0) {
         const allMappedItems = liveList.map((found, idx) => {
           const spotLtp = found.ltp || found.close || 1000.0;
-          const prevClose = found.prev_close || found.close || (spotLtp - 10);
+          const prevClose = found.prev_close || found.close || spotLtp;
           const spotDiff = spotLtp - prevClose;
           const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 
@@ -277,7 +278,7 @@ function HomeDashboard({ marketData, setMarketData }) {
           }
 
           return {
-            id: Date.now() + idx,
+            id: idx + 1,
             name: symName,
             category: cat,
             ltp: spotLtp,
@@ -293,7 +294,7 @@ function HomeDashboard({ marketData, setMarketData }) {
         localStorage.setItem('vedicedge_home_market', JSON.stringify(allMappedItems));
       }
     } catch (err) {
-      console.log("Error loading all stocks data!");
+      console.log("Error refreshing stocks!");
     }
     setLoadingAll(false);
   };
@@ -336,7 +337,7 @@ function HomeDashboard({ marketData, setMarketData }) {
           ❤️
         </button>
         <button 
-          onClick={handleLoadAllStocks} 
+          onClick={handleRefresh} 
           disabled={loadingAll}
           style={{ padding: '12px 20px', backgroundColor: '#3f3f46', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
         >

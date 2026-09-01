@@ -175,7 +175,6 @@ function App() {
           <button onClick={() => setActiveTab('scanner')} style={btnStyle(activeTab === 'scanner')}>Static Scanner</button>
           <button onClick={() => setActiveTab('biasCalendar')} style={btnStyle(activeTab === 'biasCalendar')}>Bias Calendar</button>
           <button onClick={() => setActiveTab('calculator')} style={btnStyle(activeTab === 'calculator')}>Calculator</button>
-          <button onClick={() => setActiveTab('watchlist')} style={btnStyle(activeTab === 'watchlist')}>Watchlist</button>
         </div>
       </div>
 
@@ -220,7 +219,6 @@ function App() {
           {activeTab === 'scanner' && <StaticPivotScanner />}
           {activeTab === 'biasCalendar' && <BiasCalendar />}
           {activeTab === 'calculator' && <CalculatorModule />}
-          {activeTab === 'watchlist' && <WatchlistModule />}
         </div>
 
       </div>
@@ -424,158 +422,6 @@ function HomeDashboard({ marketData, setMarketData }) {
                 </tr>
               );
             })
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function WatchlistModule() {
-  const [watchlist, setWatchlist] = useState(() => {
-    const saved = localStorage.getItem('vedicedge_watchlist');
-    return saved ? JSON.parse(saved) : ['RELIANCE', 'TCS', 'NIFTY', 'BANKNIFTY'];
-  });
-  
-  const [selectedStock, setSelectedStock] = useState('');
-  const [stockData, setStockData] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  const addStock = () => {
-    if (!selectedStock) {
-      alert("Please select a stock first!");
-      return;
-    }
-    const cleanStock = selectedStock.trim();
-    if (!watchlist.includes(cleanStock)) {
-      const updated = [...watchlist, cleanStock];
-      setWatchlist(updated);
-      localStorage.setItem('vedicedge_watchlist', JSON.stringify(updated));
-      setSelectedStock('');
-    } else {
-      fetchWatchlistData();
-      alert("Stock is already in watchlist! Refreshed data.");
-    }
-  };
-
-  const removeStock = (stockToRemove) => {
-    const updated = watchlist.filter(s => s !== stockToRemove);
-    setWatchlist(updated);
-    localStorage.setItem('vedicedge_watchlist', JSON.stringify(updated));
-  };
-
-  const getTradeDirectionBox = (ltp, lowVal, highVal) => {
-    if (!lowVal || !highVal) return { text: 'No Trade / In Range', bg: '#f1f5f9', color: '#334155' };
-    const distSup = Math.abs(ltp - lowVal) / lowVal;
-    const distRes = Math.abs(ltp - highVal) / highVal;
-
-    if (distSup <= 0.015 || ltp < lowVal) {
-      return { text: 'Buy at Support (Bounce)', bg: '#dcfce7', color: '#166534' };
-    } else if (distRes <= 0.015 || ltp > highVal) {
-      return { text: 'Sell at Resistance (Reject)', bg: '#fee2e2', color: '#991b1b' };
-    }
-    return { text: 'No Trade / In Range', bg: '#f1f5f9', color: '#64748b' };
-  };
-
-  const fetchWatchlistData = async () => {
-    if (watchlist.length === 0) return;
-    setLoading(true);
-    const results = await Promise.all(watchlist.map(async (sym) => {
-      try {
-        const res = await fetch('https://aura-proj.onrender.com/calculate-stock', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stock_symbol: sym })
-        });
-        const data = await res.json();
-        if (data && data.ltp) {
-          let hRoot = Math.sqrt(data.high || data.ltp);
-          let lRoot = Math.sqrt(data.low || data.ltp);
-          let levels = {
-            "90": { bullish: Math.pow(hRoot - (90 / 180.0), 2).toFixed(2), bearish: Math.pow(lRoot + (90 / 180.0), 2).toFixed(2) },
-            "180": { bullish: Math.pow(hRoot - (180 / 180.0), 2).toFixed(2), bearish: Math.pow(lRoot + (180 / 180.0), 2).toFixed(2) },
-            "360": { bullish: Math.pow(hRoot - (360 / 180.0), 2).toFixed(2), bearish: Math.pow(lRoot + (360 / 180.0), 2).toFixed(2) }
-          };
-          let pct = data.prev_close ? (((data.ltp - data.prev_close) / data.prev_close) * 100).toFixed(2) : "0.00";
-          let directionBox = getTradeDirectionBox(data.ltp, data.low, data.high);
-          return { ...data, pct, levels, directionBox };
-        }
-        return null;
-      } catch (e) {
-        return null;
-      }
-    }));
-    setStockData(results.filter(item => item !== null));
-    setLoading(false);
-  };
-
-  useEffect(() => { 
-    fetchWatchlistData(); 
-  }, [watchlist]);
-
-  return (
-    <div style={{ background: '#f4f4f5', padding: '0px' }}>
-      <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', alignItems: 'center', background: '#d4d4d8', padding: '15px', borderRadius: '8px', border: '1px solid #a1a1aa' }}>
-        <div style={{ flex: 1 }}>
-          <label style={{ fontSize: '12px', fontWeight: 'bold', display: 'block', color: '#27272a' }}>Select Stock / Index / Commodity:</label>
-          <select 
-            value={selectedStock} 
-            onChange={(e) => setSelectedStock(e.target.value)} 
-            style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #a1a1aa', background: 'white' }}>
-            <option value="">-- Choose Option --</option>
-            {fullFnoList.map((s, idx) => <option key={idx} value={s}>{s}</option>)}
-          </select>
-        </div>
-        <div style={{ alignSelf: 'flex-end' }}>
-          <button onClick={addStock} style={{ padding: '9px 20px', background: '#3f3f46', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>Add Stock</button>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <button onClick={fetchWatchlistData} disabled={loading} style={{ padding: '8px 16px', background: '#3f3f46', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-          {loading ? 'Fetching Live Data...' : 'Refresh Data'}
-        </button>
-      </div>
-
-      <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#f4f4f5' }}>
-        <thead>
-          <tr style={{ background: '#d4d4d8', color: '#18181b' }}>
-            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Stock / Index</th>
-            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>LTP</th>
-            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>%</th>
-            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>H / L (Range)</th>
-            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Trade Status</th>
-            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>90°</th>
-            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>180°</th>
-            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>360°</th>
-            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {stockData.length === 0 ? (
-            <tr>
-              <td colSpan="9" style={{ textAlign: 'center', padding: '20px', color: '#52525b', border: '1px solid #a1a1aa' }}>No stocks data found. Click "Refresh Data" or add a stock.</td>
-            </tr>
-          ) : (
-            stockData.map((s, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #a1a1aa' }}>
-                <td style={{ padding: '10px', fontWeight: 'bold', border: '1px solid #a1a1aa', color: '#18181b' }}>{s.stock}</td>
-                <td style={{ padding: '10px', textAlign: 'right', border: '1px solid #a1a1aa', color: '#18181b' }}>{s.ltp}</td>
-                <td style={{ padding: '10px', textAlign: 'right', color: s.pct >= 0 ? '#15803d' : '#b91c1c', border: '1px solid #a1a1aa', fontWeight: 'bold' }}>{s.pct}%</td>
-                <td style={{ padding: '10px', textAlign: 'center', fontSize: '12px', border: '1px solid #a1a1aa', color: '#27272a' }}>{s.high} / {s.low}</td>
-                <td style={{ padding: '10px', textAlign: 'center', border: '1px solid #a1a1aa' }}>
-                  <div style={{ padding: '5px 8px', background: s.directionBox.bg, color: s.directionBox.color, borderRadius: '4px', fontWeight: 'bold', fontSize: '11px', border: `1px solid ${s.directionBox.color}` }}>
-                    {s.directionBox.text}
-                  </div>
-                </td>
-                <td style={{ padding: '10px', textAlign: 'center', fontSize: '11px', border: '1px solid #a1a1aa', color: '#27272a' }}>B:{s.levels["90"].bullish}<br/>S:{s.levels["90"].bearish}</td>
-                <td style={{ padding: '10px', textAlign: 'center', fontSize: '11px', border: '1px solid #a1a1aa', color: '#27272a' }}>B:{s.levels["180"].bullish}<br/>S:{s.levels["180"].bearish}</td>
-                <td style={{ padding: '10px', textAlign: 'center', fontSize: '11px', border: '1px solid #a1a1aa', color: '#27272a' }}>B:{s.levels["360"].bullish}<br/>S:{s.levels["360"].bearish}</td>
-                <td style={{ padding: '10px', textAlign: 'center', border: '1px solid #a1a1aa' }}>
-                  <button onClick={() => removeStock(s.stock)} style={{ background: '#b91c1c', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
-                </td>
-              </tr>
-            ))
           )}
         </tbody>
       </table>

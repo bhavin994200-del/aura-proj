@@ -127,7 +127,7 @@ function StaticPivotScanner() {
     localStorage.setItem('my_watchlist', JSON.stringify(updated));
   };
 
-  // 👈 સપોર્ટ હંમેશાં નીચે (માઇનસ) અને રેઝિસ્ટન્સ ઉપર (પ્લસ) સચોટ રીતે ગોઠવ્યા છે
+  // 👈 સપોર્ટ (નીચે/માઇનસ) અને રેઝિસ્ટન્સ (ઉપર/પ્લસ) ની ગણતરી બરાબર સીધી કરી દીધી છે
   const getSafeValues = (closePrice) => {
     if (!closePrice) return { support: 0, resistance: 0 };
     const r = Math.sqrt(closePrice);
@@ -461,6 +461,15 @@ function StaticPivotScanner() {
                 const mom = item.momentum || {};
                 const rsiVal = getStockRsi(item);
 
+                // 👈 સેક્ટર્સ અને ઇન્ડેક્સને 'Index' કેટેગરીમાં દર્શાવવા માટેનું ચેક
+                let categoryLabel = 'F&O';
+                if (
+                  ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAPNIFTY', 'NIFTYIT', 'NIFTYAUTO', 'NIFTYFMCG', 'NIFTYMETAL', 'NIFTYPHARMA', 'NIFTYENERGY', 'NIFTYINFRA'].includes(item.symbol) ||
+                  item.symbol.startsWith('NIFTY')
+                ) {
+                  categoryLabel = 'Index';
+                }
+
                 return (
                   <tr key={idx} style={{ borderBottom: `1px solid ${staticSubTab === 'weekly' ? '#bbf7d0' : '#fecaca'}`, background: confluenceScore === 2 ? '#fefce8' : 'white' }}>
                     <td style={{ padding: '10px', fontWeight: 'bold', verticalAlign: 'top' }}>
@@ -469,6 +478,7 @@ function StaticPivotScanner() {
                           {isFav ? '⭐' : '☆'}
                         </button>
                         <span style={{ color: status.color, fontSize: '15px', fontWeight: 'bold' }}>{item.symbol}</span>
+                        <span style={{ fontSize: '10px', background: categoryLabel === 'Index' ? '#dbeafe' : '#f1f5f9', color: categoryLabel === 'Index' ? '#1e40af' : '#475569', padding: '2px 5px', borderRadius: '4px', fontWeight: 'bold' }}>{categoryLabel}</span>
                         <span>{status.symbol}</span>
                       </div>
                       {confluenceScore === 2 && (

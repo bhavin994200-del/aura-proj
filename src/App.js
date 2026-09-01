@@ -28,11 +28,8 @@ function App() {
         name: sym,
         category: 'Index',
         ltp: Number(base.toFixed(2)),
-        futuresPrice: Number((base * 1.003).toFixed(2)),
         spotChange: 120.50,
         spotChangePct: 0.50,
-        futChange: 145.00,
-        futChangePct: 0.60,
         prevClose: Number((base - 100).toFixed(2)),
         high: Number((base + 150).toFixed(2)),
         low: Number((base - 120).toFixed(2))
@@ -55,7 +52,6 @@ function App() {
   }
 
   useEffect(() => {
-    // 👈 સર્વરને જાગૃત (Active) રાખવા માટે બેકએન્ડ પિંગ ફંક્શન
     const keepServerAlive = () => {
       fetch('https://aura-proj.onrender.com/scan-static-pivot', {
         method: 'POST',
@@ -139,8 +135,6 @@ function App() {
     keepServerAlive();
     fetchGlobalLiveData();
     const interval = setInterval(fetchGlobalLiveData, 5000);
-    
-    // 👈 દર 25 સેકન્ડે સર્વરને પિંગ કર્યા કરશે જેથી રેન્ડર સ્લીપ ન થાય
     const keepAliveInterval = setInterval(keepServerAlive, 25000);
 
     return () => {
@@ -226,29 +220,48 @@ function HomeDashboard({ marketData, setMarketData }) {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState('F&O');
-  
-  const [alerts, setAlerts] = useState({});
-  const [alertInputs, setAlertInputs] = useState({});
+  const [loadingAll, setLoadingAll] = useState(false);
 
-  useEffect(() => {
-    marketData.forEach(item => {
-      const targetAlert = alerts[item.name];
-      if (targetAlert && item.ltp >= Number(targetAlert)) {
-        alert(`🚨 PRICE ALERT! ${item.name} has crossed your target ₹${targetAlert}! Current LTP: ₹${item.ltp}`);
-        setAlerts(prev => {
-          const updated = { ...prev };
-          delete updated[item.name];
-          return updated;
+  const handleLoadAllStocks = async () => {
+    setLoadingAll(true);
+    try {
+      const symbolsToFetch = fullFnoList;
+
+      const res = await fetch('https://aura-proj.onrender.com/scan-static-pivot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols: symbolsToFetch })
+      });
+      const response = await res.json();
+      const liveList = response.data || [];
+
+      if (liveList.length > 0) {
+        const allMappedItems = liveList.map((found, idx) => {
+          const spotLtp = found.ltp || found.close || 1000.0;
+          const prevClose = found.prev_close || (spotLtp - 10);
+          const spotDiff = spotLtp - prevClose;
+          const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
+
+          return {
+            id: Date.now() + idx,
+            name: found.symbol || found.name || 'UNKNOWN',
+            category: 'F&O',
+            ltp: spotLtp,
+            spotChange: Math.abs(spotDiff).toFixed(2),
+            spotChangePct: Math.abs(spotPct).toFixed(2),
+            prevClose: prevClose,
+            high: found.weekly?.resistance || found.high || (spotLtp + 20),
+            low: found.weekly?.support || found.low || (spotLtp - 20)
+          };
         });
-      }
-    });
-  }, [marketData, alerts]);
 
-  const handleSetAlert = (symbol) => {
-    const val = alertInputs[symbol];
-    if (!val) return;
-    setAlerts(prev => ({ ...prev, [symbol]: val }));
-    alert(`✅ Alert set for ${symbol} at ₹${val}`);
+        setMarketData(allMappedItems);
+        localStorage.setItem('vedicedge_home_market', JSON.stringify(allMappedItems));
+      }
+    } catch (err) {
+      alert("Error loading all stocks data!");
+    }
+    setLoadingAll(false);
   };
 
   const handleAddStock = async (e) => {
@@ -276,20 +289,13 @@ function HomeDashboard({ marketData, setMarketData }) {
       const spotDiff = spotLtp - prevClose;
       const spotPct = prevClose ? (spotDiff / prevClose) * 100 : 0;
 
-      const futPrice = data.futures_price || Number((spotLtp * 1.003).toFixed(2));
-      const futDiff = futPrice - prevClose;
-      const futPct = prevClose ? (futDiff / prevClose) * 100 : 0;
-
       const newItem = {
         id: Date.now(),
         name: cleanSymbol,
         category: newCategory,
         ltp: spotLtp,
-        futuresPrice: futPrice,
         spotChange: Math.abs(spotDiff).toFixed(2),
         spotChangePct: Math.abs(spotPct).toFixed(2),
-        futChange: Math.abs(futDiff).toFixed(2),
-        futChangePct: Math.abs(futPct).toFixed(2),
         prevClose: prevClose,
         high: data.high || (spotLtp + 20),
         low: data.low || (spotLtp - 20)
@@ -319,8 +325,17 @@ function HomeDashboard({ marketData, setMarketData }) {
       <h2 style={{ color: '#18181b', margin: '0 0 5px 0' }}>Market Overview</h2>
       <p style={{ color: '#52525b', fontSize: '14px', marginTop: '0' }}>Manage Indices, F&O, and Commodities</p>
       
-      <form onSubmit={handleAddStock} style={{ display: 'flex', gap: '10px', marginTop: '20px', marginBottom: '20px', backgroundColor: '#d4d4d8', padding: '15px', borderRadius: '10px', border: '1px solid #a1a1aa', flexWrap: 'wrap', alignItems: 'center' }}>
-        
+      <div style={{ marginTop: '15px', marginBottom: '15px' }}>
+        <button 
+          onClick={handleLoadAllStocks} 
+          disabled={loadingAll}
+          style={{ padding: '10px 20px', backgroundColor: '#3f3f46', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+        >
+          {loadingAll ? 'Loading All Stocks...' : '📥 Load All F&O / Index / Commodity Stocks'}
+        </button>
+      </div>
+
+      <form onSubmit={handleAddStock} style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: '#d4d4d8', padding: '15px', borderRadius: '10px', border: '1px solid #a1a1aa', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ flex: '2', minWidth: '180px' }}>
           <input 
             type="text" 
@@ -370,92 +385,60 @@ function HomeDashboard({ marketData, setMarketData }) {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
-        {filteredData.map((item) => {
-          const hRoot = Math.sqrt(item.high || item.ltp);
-          const lRoot = Math.sqrt(item.low || item.ltp);
-          
-          const support90 = Math.pow(hRoot - (90 / 180.0), 2).toFixed(2);
-          const resistance90 = Math.pow(lRoot + (90 / 180.0), 2).toFixed(2);
+      {/* List / Table View */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#f4f4f5' }}>
+        <thead>
+          <tr style={{ background: '#d4d4d8', color: '#18181b' }}>
+            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Category</th>
+            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Stock / Index</th>
+            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>LTP</th>
+            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Change (%)</th>
+            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Prev Close</th>
+            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Low / High</th>
+            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Support (90°) / Resist (90°)</th>
+            <th style={{ padding: '10px', border: '1px solid #a1a1aa' }}>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredData.length === 0 ? (
+            <tr>
+              <td colSpan="8" style={{ textAlign: 'center', padding: '20px', color: '#52525b', border: '1px solid #a1a1aa' }}>No data found.</td>
+            </tr>
+          ) : (
+            filteredData.map((item) => {
+              const hRoot = Math.sqrt(item.high || item.ltp);
+              const lRoot = Math.sqrt(item.low || item.ltp);
+              const support90 = Math.pow(hRoot - (90 / 180.0), 2).toFixed(2);
+              const resistance90 = Math.pow(lRoot + (90 / 180.0), 2).toFixed(2);
+              const spotDiffVal = item.ltp - item.prevClose;
+              const isSpotPos = spotDiffVal >= 0;
 
-          const spotDiffVal = item.ltp - item.prevClose;
-          const isSpotPos = spotDiffVal >= 0;
-
-          const futPriceVal = item.futuresPrice || (item.ltp * 1.003).toFixed(2);
-          const futDiffVal = futPriceVal - item.prevClose;
-          const isFutPos = futDiffVal >= 0;
-
-          return (
-            <div key={item.id} style={{ ...cardStyle, padding: '15px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <div>
-                  <span style={{ fontSize: '9px', textTransform: 'uppercase', backgroundColor: '#e4e4e7', padding: '2px 5px', borderRadius: '4px', fontWeight: 'bold', color: '#52525b', border: '1px solid #a1a1aa' }}>
-                    {item.category}
-                  </span>
-                  <h3 style={{ margin: '4px 0 0 0', fontSize: '16px', color: '#18181b' }}>{item.name}</h3>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '11px', color: '#52525b' }}>Prev: <strong style={{ color: '#18181b' }}>{item.prevClose}</strong></span>
-                  <button onClick={() => handleDeleteStock(item.id)} style={{ background: 'transparent', border: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }} title="Delete">×</button>
-                </div>
-              </div>
-
-              <div style={{ backgroundColor: '#ffffff', padding: '10px', borderRadius: '8px', marginBottom: '10px', border: '1px solid #d4d4d8', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', color: '#71717a', fontWeight: 'bold' }}>SPOT</span>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#27272a', marginRight: '6px' }}>₹ {item.ltp}</span>
-                    <span style={{ fontSize: '10px', backgroundColor: isSpotPos ? '#dcfce7' : '#fee2e2', color: isSpotPos ? '#15803d' : '#b91c1c', padding: '2px 4px', borderRadius: '4px', fontWeight: 'bold' }}>
+              return (
+                <tr key={item.id} style={{ borderBottom: '1px solid #a1a1aa' }}>
+                  <td style={{ padding: '10px', textAlign: 'center', border: '1px solid #a1a1aa', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}>{item.category}</td>
+                  <td style={{ padding: '10px', fontWeight: 'bold', border: '1px solid #a1a1aa', color: '#18181b' }}>{item.name}</td>
+                  <td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold', border: '1px solid #a1a1aa', color: '#18181b' }}>₹ {item.ltp}</td>
+                  <td style={{ padding: '10px', textAlign: 'right', border: '1px solid #a1a1aa' }}>
+                    <span style={{ fontSize: '11px', backgroundColor: isSpotPos ? '#dcfce7' : '#fee2e2', color: isSpotPos ? '#15803d' : '#b91c1c', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
                       {isSpotPos ? `+${item.spotChange || spotDiffVal.toFixed(2)}` : `${item.spotChange || spotDiffVal.toFixed(2)}`} ({isSpotPos ? `+${item.spotChangePct || '0.50'}%` : `${item.spotChangePct || '0.50'}%`})
                     </span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e4e4e7', paddingTop: '6px' }}>
-                  <span style={{ fontSize: '11px', color: '#15803d', fontWeight: 'bold' }}>FUT</span>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#15803d', marginRight: '6px' }}>₹ {futPriceVal}</span>
-                    <span style={{ fontSize: '10px', backgroundColor: isFutPos ? '#dcfce7' : '#fee2e2', color: isFutPos ? '#15803d' : '#b91c1c', padding: '2px 4px', borderRadius: '4px', fontWeight: 'bold' }}>
-                      {isFutPos ? `+${item.futChange || futDiffVal.toFixed(2)}` : `${item.futChange || futDiffVal.toFixed(2)}`} ({isFutPos ? `+${item.futChangePct || '0.60'}%` : `${item.futChangePct || '0.60'}%`})
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#52525b', marginBottom: '8px', borderBottom: '1px solid #d4d4d8', paddingBottom: '6px' }}>
-                <span>Low: <strong style={{ color: '#dc2626' }}>{item.low}</strong></span>
-                <span>High: <strong style={{ color: '#16a34a' }}>{item.high}</strong></span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#3f3f46', fontWeight: '600', marginBottom: '8px' }}>
-                <span style={{ color: '#166534' }}>Support (90°): {support90}</span>
-                <span style={{ color: '#991b1b' }}>Resist (90°): {resistance90}</span>
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', backgroundColor: '#e4e4e7', padding: '6px', borderRadius: '6px', border: '1px solid #a1a1aa' }}>
-                <input 
-                  type="number"
-                  placeholder="Set Alert Price..."
-                  value={alertInputs[item.name] || ''}
-                  onChange={(e) => setAlertInputs({ ...alertInputs, [item.name]: e.target.value })}
-                  style={{ flex: 1, padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid #a1a1aa' }}
-                />
-                <button 
-                  onClick={() => handleSetAlert(item.name)}
-                  style={{ padding: '4px 10px', background: '#3f3f46', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
-                >
-                  {alerts[item.name] ? `Active (${alerts[item.name]})` : 'Set'}
-                </button>
-              </div>
-
-            </div>
-          );
-        })}
-      </div>
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'right', border: '1px solid #a1a1aa', color: '#52525b' }}>{item.prevClose}</td>
+                  <td style={{ padding: '10px', textAlign: 'center', border: '1px solid #a1a1aa', fontSize: '12px' }}>
+                    <span style={{ color: '#dc2626' }}>{item.low}</span> / <span style={{ color: '#16a34a' }}>{item.high}</span>
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'center', border: '1px solid #a1a1aa', fontSize: '11px' }}>
+                    <span style={{ color: '#166534', fontWeight: '600' }}>S: {support90}</span> | <span style={{ color: '#991b1b', fontWeight: '600' }}>R: {resistance90}</span>
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'center', border: '1px solid #a1a1aa' }}>
+                    <button onClick={() => handleDeleteStock(item.id)} style={{ background: '#b91c1c', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -633,14 +616,6 @@ const inputStyle = {
   color: '#27272a',
   flex: '1',
   minWidth: '100px'
-};
-
-const cardStyle = {
-  backgroundColor: '#f4f4f5',
-  padding: '15px',
-  borderRadius: '12px',
-  border: '1px solid #a1a1aa',
-  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)'
 };
 
 export default App;

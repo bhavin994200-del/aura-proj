@@ -16,9 +16,10 @@ function OpenPrice() {
   const [loading, setLoading] = useState(false);
   const [filterType, setFilterType] = useState('ALL'); 
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 🔥 ફિક્સ: દર વખતે પેજ લોડ થાય ત્યારે લાઈવ કરન્ટ ટાઇમ જ પકડે
   const [lastUpdated, setLastUpdated] = useState(() => {
-    const savedDate = localStorage.getItem('vedicedge_openprice_date');
-    return savedDate === todayKey ? (localStorage.getItem('vedicedge_openprice_time') || '') : '';
+    return new Date().toLocaleTimeString();
   });
 
   const [tradeBookLog, setTradeBookLog] = useState(() => {
@@ -93,7 +94,6 @@ function OpenPrice() {
     setLoading(false);
   };
 
-  // 👈 બેકગ્રાઉન્ડ લાઈવ અપડેટ (લોડિંગ સ્ટેટ વગરનું, જેથી ક્યારેય બટન અટકશે નહીં)
   const updateLiveLtpOnly = async () => {
     try {
       const res = await fetch('https://aura-proj.onrender.com/scan-open-price', {

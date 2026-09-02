@@ -1,8 +1,28 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from watchlistData import fullFnoList
+
+
+# 🔥 સીધી src/watchlistData.js માંથી જ લિસ્ટ ઓટોમેટિક રીડ કરવા માટેનું ફંક્શન
+def load_full_watchlist():
+  try:
+    with open('src/watchlistData.js', 'r', encoding='utf-8') as f:
+      content = f.read()
+    match = re.search(r'\[(.*?)\]', content, re.DOTALL)
+    if match:
+      items = re.findall(r"['\"]([^'\"]+)['\"]", match.group(1))
+      if items:
+        return items
+  except Exception as e:
+    print('Error reading watchlistData.js:', e)
+
+  # જો ફાઇલ ન મળે તો સેફ ડિફોલ્ટ લિસ્ટ
+  return ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'NIFTY', 'BANKNIFTY', 'GOLD']
+
+
+fullFnoList = load_full_watchlist()
 
 
 def scan_confluence_vcp(
@@ -116,6 +136,6 @@ def scan_all_vcp(account_capital: float = 500000.0):
 
 if __name__ == '__main__':
   my_capital = 500000
-  print(f'=== FAST SCANNING {len(fullFnoList)} F&O STOCKS ===')
+  print(f'=== FAST SCANNING {len(fullFnoList)} STOCKS ===')
   sigs = scan_all_vcp(my_capital)
   print(f'Found: {len(sigs)} signals')

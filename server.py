@@ -283,14 +283,14 @@ async def get_bias_data(req: Request):
       month_str = body.get('month', '2026-08')
       symbol = body.get('symbol', 'NIFTY')
     else:
-      month_str = '2026-08'
-      symbol = 'NIFTY'
+      month_str = req.query_params.get('month', '2026-08')
+      symbol = req.query_params.get('symbol', 'NIFTY')
   except:
     month_str = '2026-08'
     symbol = 'NIFTY'
 
   try:
-    parts = month_str.split('-')
+    parts = str(month_str).split('-')
     year, month = int(parts[0], 10), int(parts[1], 10)
   except:
     year, month = 2026, 8

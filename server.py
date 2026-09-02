@@ -30,10 +30,10 @@ TELEGRAM_CHAT_ID = '6778191879'
 last_telegram_alerts = {}
 
 
-# 🔥 Cron-job પિંગ એરર દૂર કરવા માટેનો સાદો ટેક્સ્ટ રૂટ (Output Too Large Fix)
+# 🔥 Cron-job પિંગ એરર દૂર કરવા માટેનો સાદો JSON રૂટ (Safe & Fast)
 @app.get('/ping')
 async def ping_server():
-    return 'OK'
+  return {'status': 'active', 'message': 'Aura Terminal Backend is Awake'}
 
 
 def send_telegram_alert(symbol, message):

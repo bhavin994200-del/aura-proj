@@ -30,8 +30,8 @@ TELEGRAM_CHAT_ID = '6778191879'
 last_telegram_alerts = {}
 
 
-# 🔥 Cron-job પિંગ એરર દૂર કરવા માટેનો સાદો JSON રૂટ (Safe & Fast)
-@app.get('/ping')
+# 🔥 UptimeRobot અને Cron-job પિંગ એરર દૂર કરવા માટેનો સેફ રૂટ (GET અને HEAD બંને સાથે)
+@app.api_route('/ping', methods=['GET', 'HEAD'])
 async def ping_server():
   return {'status': 'active', 'message': 'Aura Terminal Backend is Awake'}
 
@@ -765,7 +765,11 @@ async def scan_static_pivot(req: Request):
         'symbol': sym,
         'ltp': round(ltp, 2),
         'volume_spike': volume_spike,
-        'prev_close': round(prev_close_val, 2) if 'prev_close_val' in locals() else round(ltp, 2),
+        'prev_close': (
+            round(prev_close_val, 2)
+            if 'prev_close_val' in locals()
+            else round(ltp, 2)
+        ),
         'pcr': pcr_value,
         'momentum': {
             'orb_high': round(orb_high, 2),

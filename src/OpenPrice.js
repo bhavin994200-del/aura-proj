@@ -121,7 +121,10 @@ function OpenPrice() {
             const oldStatus = oldItem.status; 
             const newStatus = found.status;
 
-            if (!isInitialMount.current && oldStatus === 'RANGE' && (newStatus === 'BUY' || newStatus === 'SELL')) {
+            // 🔥 પેજ લોડ થયા પછીના પહેલા સિંક વખતે બધાના એકસાથે એલાર્મ ન વાગે તે ફિક્સ
+            const isReallyNewTrigger = !isInitialMount.current && oldStatus === 'RANGE' && (newStatus === 'BUY' || newStatus === 'SELL');
+
+            if (isReallyNewTrigger) {
               playBeepSound(newStatus);
               hasNewTrigger = true;
               const triggerPriceVal = newStatus === 'BUY' ? found.buyLvl : found.sellLvl;

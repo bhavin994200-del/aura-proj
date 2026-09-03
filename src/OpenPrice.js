@@ -184,6 +184,7 @@ function OpenPrice() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchAllOpenPrices();
     const interval = setInterval(updateLiveLtpOnly, 5000); 
@@ -352,8 +353,8 @@ function OpenPrice() {
                 }
 
                 const tvSymbol = item.symbol === 'NIFTY' ? 'NSE:NIFTY' : 
-                                 item.symbol === 'BANKNIFTY' ? 'NSE:BANKNIFTY' : 
-                                 item.symbol === 'SENSEX' ? 'BSE:SENSEX' : `NSE:${item.symbol}`;
+                               item.symbol === 'BANKNIFTY' ? 'NSE:BANKNIFTY' : 
+                               item.symbol === 'SENSEX' ? 'BSE:SENSEX' : `NSE:${item.symbol}`;
                 const tvUrl = `https://in.tradingview.com/chart/?symbol=${tvSymbol}`;
 
                 return (

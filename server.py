@@ -9,6 +9,10 @@ import requests
 import swisseph as swe
 import yfinance as yf
 
+# 🔥 એન્જલ વન માટે જરૂરી લાઈબ્રેરીઓ
+from SmartApi import SmartConnect
+import pyotp
+
 # 👇 ફાસ્ટ મલ્ટિથ્રેડેડ VCP સ્કેનર અને લિસ્ટ ઇમ્પોર્ટ કર્યા
 from confluenceVcpScanner import scan_all_vcp
 from watchlistData import fullFnoList
@@ -23,6 +27,30 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+# 🔥 Angel One SmartAPI Credentials & Session Setup
+API_KEY = "r8krDJEZ"
+CLIENT_CODE = "9664833900"
+MPIN = "2001"
+TOTP_KEY = "VRB4OQ5FP6P3ONYRNODZWYMY6A"
+
+smartApi = SmartConnect(api_key=API_KEY)
+
+
+def get_angel_session():
+  try:
+    totp = pyotp.TOTP(TOTP_KEY).now()
+    data = smartApi.generateSession(CLIENT_CODE, MPIN, totp)
+    if data and data.get('status'):
+      print('Angel One Session Active Successfully!')
+      return smartApi
+  except Exception as e:
+    print('Angel One Session Error:', e)
+  return None
+
+
+# બેકએન્ડ સ્ટાર્ટ થાય એટલે સેશન કોલ કરી લેવો
+active_smart_api = get_angel_session()
 
 
 # 🔥 UptimeRobot અને Cron-job પિંગ એરર દૂર કરવા માટેનો સેફ રૂટ (GET અને HEAD બંને સાથે)

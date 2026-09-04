@@ -24,210 +24,11 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
-# 🔥 Telegram Credentials Configuration
-TELEGRAM_BOT_TOKEN = '8958353388:AAGEz1FlbMauc7WUEZUijuc24OGHwTuDLXI'
-TELEGRAM_CHAT_ID = '6778191879'
-last_telegram_alerts = {}
-
 
 # 🔥 UptimeRobot અને Cron-job પિંગ એરર દૂર કરવા માટેનો સેફ રૂટ (GET અને HEAD બંને સાથે)
 @app.api_route('/ping', methods=['GET', 'HEAD'])
 async def ping_server():
   return {'status': 'active', 'message': 'Aura Terminal Backend is Awake'}
-
-
-def send_telegram_alert(symbol, message):
-  if not TELEGRAM_BOT_TOKEN:
-    return
-  current_time = datetime.now().timestamp()
-
-  if symbol in last_telegram_alerts and (
-      current_time - last_telegram_alerts[symbol] < 3600
-  ):
-    return
-
-  url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
-  payload = {
-      'chat_id': TELEGRAM_CHAT_ID,
-      'text': message,
-      'parse_mode': 'Markdown',
-  }
-  try:
-    response = requests.post(url, json=payload, timeout=5)
-    last_telegram_alerts[symbol] = current_time
-    return response.json()
-  except Exception as e:
-    print('Telegram Error:', e)
-    return None
-
-
-# 🔥 Telegram Bot Listener (ડબલ મેસેજ રોકવા અને પરફેક્ટ ઓફસેટ સાથે)
-async def telegram_bot_listener():
-  offset = 0
-  while True:
-    try:
-      url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates?offset={offset}&timeout=30'
-      res = requests.get(url, timeout=35)
-      data = res.json()
-
-      if data.get('ok'):
-        for update in data.get('result', []):
-          offset = update['update_id'] + 1
-          message = update.get('message', {})
-          text = message.get('text', '').strip().upper()
-          chat_id = message.get('chat', {}).get('id')
-
-          if text and chat_id:
-            if text == '/START':
-              reply = (
-                  '👋 સ્વાગત છે Aura Terminal માં!\nગમે તે સ્ટોક કે ઇન્ડેક્સનું'
-                  ' નામ લખો (દા.ત. `RELIANCE`, `NIFTY`), એટલે હું તેના'
-                  ' **OpenPrice** અને **Weekly/Monthly All Gann Degrees** મોકલી'
-                  ' આપીશ.'
-              )
-            else:
-              sym = text
-              if sym in ['NIFTY', 'FINNIFTY', 'MIDCAPNIFTY']:
-                t_str = '^NSEI'
-              elif sym == 'BANKNIFTY':
-                t_str = '^NSEBANK'
-              elif sym == 'SENSEX':
-                t_str = '^BSESN'
-              elif sym == 'COPPER':
-                t_str = 'HG=F'
-              elif sym == 'CRUDEOIL':
-                t_str = 'CL=F'
-              elif sym == 'NATURALGAS':
-                t_str = 'NG=F'
-              elif sym == 'GOLD':
-                t_str = 'GC=F'
-              elif sym == 'SILVER':
-                t_str = 'SI=F'
-              else:
-                t_str = f'{sym}.NS'
-
-              ticker = yf.Ticker(t_str)
-              hist = ticker.history(period='6mo', interval='1d')
-
-              if not hist.empty and len(hist) > 10:
-                ltp = float(hist['Close'].iloc[-1])
-                open_price = (
-                    float(hist['Open'].iloc[-1])
-                    if 'Open' in hist.columns
-                    and not math.isnan(hist['Open'].iloc[-1])
-                    else ltp
-                )
-                prev_close = (
-                    float(hist['Close'].iloc[-2]) if len(hist) > 1 else ltp
-                )
-                pct = round(((ltp - prev_close) / prev_close) * 100, 2)
-
-                # 1. Open Price Gann Octave
-                base_price = open_price if open_price > 0 else ltp
-                root = math.sqrt(base_price)
-                baseRoot = math.floor(root * 8.0) / 8.0
-                sell_lvl = math.pow(baseRoot, 2)
-                buy_lvl = math.pow(baseRoot + 0.125, 2)
-                bT1 = math.pow(baseRoot + 0.250, 2)
-                bT2 = math.pow(baseRoot + 0.375, 2)
-                bT3 = math.pow(baseRoot + 0.500, 2)
-                bT4 = math.pow(baseRoot + 0.625, 2)
-                sT1 = math.pow(baseRoot - 0.125, 2)
-                sT2 = math.pow(baseRoot - 0.250, 2)
-                sT3 = math.pow(baseRoot - 0.375, 2)
-                sT4 = math.pow(baseRoot - 0.500, 2)
-
-                # 2. Weekly Gann Levels (All Degrees)
-                df_weekly = hist.resample('W-FRI').last().dropna()
-                w_close = (
-                    float(df_weekly['Close'].iloc[-2])
-                    if len(df_weekly) >= 2
-                    else ltp
-                )
-                r_w = math.sqrt(w_close)
-                w_up = {
-                    'g45': round((r_w + (45 / 180)) ** 2, 2),
-                    'g90': round((r_w + (90 / 180)) ** 2, 2),
-                    'g180': round((r_w + 1.0) ** 2, 2),
-                    'g360': round((r_w + 2.0) ** 2, 2),
-                }
-                w_down = {
-                    'g45': round((r_w - (45 / 180)) ** 2, 2),
-                    'g90': round((r_w - (90 / 180)) ** 2, 2),
-                    'g180': round((r_w - 1.0) ** 2, 2),
-                    'g360': round((r_w - 2.0) ** 2, 2),
-                }
-
-                # 3. Monthly Gann Levels (All Degrees)
-                df_monthly = hist.resample('ME').last().dropna()
-                m_close = (
-                    float(df_monthly['Close'].iloc[-2])
-                    if len(df_monthly) >= 2
-                    else ltp
-                )
-                r_m = math.sqrt(m_close)
-                m_up = {
-                    'g45': round((r_m + (45 / 180)) ** 2, 2),
-                    'g90': round((r_m + (90 / 180)) ** 2, 2),
-                    'g180': round((r_m + 1.0) ** 2, 2),
-                    'g360': round((r_m + 2.0) ** 2, 2),
-                }
-                m_down = {
-                    'g45': round((r_m - (45 / 180)) ** 2, 2),
-                    'g90': round((r_m - (90 / 180)) ** 2, 2),
-                    'g180': round((r_m - 1.0) ** 2, 2),
-                    'g360': round((r_m - 2.0) ** 2, 2),
-                }
-
-                reply = (
-                    f'📊 *Analysis Report: {sym}*\n'
-                    f'💰 *LTP:* ₹{round(ltp, 2)}  ({pct}%)\n'
-                    f'📂 *Open Price:* ₹{round(open_price, 2)}\n\n'
-                    f'🚀 *OpenPrice Gann Levels:*\n'
-                    f'• 🟢 Buy Trigger: ₹{round(buy_lvl, 2)}\n'
-                    f'  Targets: ₹{round(bT1, 2)} | ₹{round(bT2, 2)} |'
-                    f' ₹{round(bT3, 2)} | ₹{round(bT4, 2)}\n'
-                    f'• 🔴 Sell Trigger: ₹{round(sell_lvl, 2)}\n'
-                    f'  Targets: ₹{round(sT1, 2)} | ₹{round(sT2, 2)} |'
-                    f' ₹{round(sT3, 2)} | ₹{round(sT4, 2)}\n\n'
-                    f'📅 *Weekly Gann Degrees (Close: ₹{round(w_close, 2)}):*\n'
-                    f'• 🟢 Up: 45°: ₹{w_up["g45"]} | 90°: ₹{w_up["g90"]} |'
-                    f' 180°: ₹{w_up["g180"]} | 360°: ₹{w_up["g360"]}\n'
-                    f'• 🔴 Down: 45°: ₹{w_down["g45"]} | 90°: ₹{w_down["g90"]} |'
-                    f' 180°: ₹{w_down["g180"]} | 360°: ₹{w_down["g360"]}\n\n'
-                    f'📅 *Monthly Gann Degrees (Close: ₹{round(m_close, 2)}):*\n'
-                    f'• 🟢 Up: 45°: ₹{m_up["g45"]} | 90°: ₹{m_up["g90"]} |'
-                    f' 180°: ₹{m_up["g180"]} | 360°: ₹{m_up["g360"]}\n'
-                    f'• 🔴 Down: 45°: ₹{m_down["g45"]} | 90°: ₹{m_down["g90"]} |'
-                    f' 180°: ₹{m_down["g180"]} | 360°: ₹{m_down["g360"]}'
-                )
-              else:
-                reply = (
-                    f"❌ માફ કરશો, '{sym}' માટે ડેટા મળ્યો નથી. કૃપા કરીને સાચું"
-                    ' નામ લખો.'
-                )
-
-              send_url = (
-                  f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
-              )
-              requests.post(
-                  send_url,
-                  json={
-                      'chat_id': chat_id,
-                      'text': reply,
-                      'parse_mode': 'Markdown',
-                  },
-                  timeout=5,
-              )
-    except Exception as e:
-      print(f'Bot Listener Error: {e}')
-    await asyncio.sleep(2)
-
-
-@app.on_event('startup')
-async def startup_event():
-  asyncio.create_task(telegram_bot_listener())
-  print('🟢 Telegram Bot Listener Started Successfully!')
 
 
 # 🔥 WebSocket Connection Manager & Endpoint (Error 500 Fix)
@@ -451,15 +252,6 @@ async def calculate_stock(item: dict):
   }
 
 
-@app.get('/test-telegram')
-async def test_telegram():
-  res = send_telegram_alert(
-      'TEST',
-      '🚀 *Aura Terminal Alert*\nTest message from backend successfully sent!',
-  )
-  return {'status': 'success', 'response': res}
-
-
 @app.post('/scan-open-price')
 async def scan_open_price(item: dict):
   symbols = item.get('symbols', ['NIFTY', 'BANKNIFTY', 'RELIANCE'])
@@ -533,21 +325,11 @@ async def scan_open_price(item: dict):
         statusBg = '#dcfce7'
         statusColor = '#166534'
         statusText = '🟢 Buy Above Trigger'
-        send_telegram_alert(
-            sym,
-            f'🟢 *BUY ALERT*\nStock: *{sym}*\nLTP: ₹{ltp}\nTrigger Level:'
-            f' ₹{buy_lvl}',
-        )
       elif ltp < sell_lvl:
         status = 'SELL'
         statusBg = '#fee2e2'
         statusColor = '#991b1b'
         statusText = '🔴 Sell Below Trigger'
-        send_telegram_alert(
-            sym,
-            f'🔴 *SELL ALERT*\nStock: *{sym}*\nLTP: ₹{ltp}\nTrigger Level:'
-            f' ₹{sell_lvl}',
-        )
 
       data.append({
           'symbol': sym,
